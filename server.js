@@ -7,6 +7,7 @@ const path = require('path');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
+const fs = require('fs');
 
 // Database configuration - supports Railway env vars and local XAMPP
 const dbConfig = {
@@ -18,29 +19,99 @@ const dbConfig = {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    charset: 'utf8mb4'
+    charset: 'utf8mb4',
+    connectTimeout: 30000
 };
 
-// Support DATABASE_URL format (Railway)
+// Support DATABASE_URL format (Railway) with proper SSL
 let pool;
 if (process.env.DATABASE_URL) {
-    pool = mysql.createPool(process.env.DATABASE_URL);
+    pool = mysql.createPool({
+        uri: process.env.DATABASE_URL,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        charset: 'utf8mb4',
+        connectTimeout: 30000,
+        ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
+    });
+    console.log('📦 Using DATABASE_URL for connection');
+} else if (process.env.MYSQLHOST) {
+    // Railway individual env vars
+    pool = mysql.createPool({
+        ...dbConfig,
+        ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
+    });
+    console.log(`📦 Using Railway env vars: ${dbConfig.host}:${dbConfig.port}`);
 } else {
     pool = mysql.createPool(dbConfig);
+    console.log(`📦 Using local config: ${dbConfig.host}:${dbConfig.port}`);
 }
 
-// Test database connection
-async function testConnection() {
+// Track database readiness
+let dbReady = false;
+
+// Auto-initialize database schema
+async function initializeDatabase(connection) {
     try {
-        const connection = await pool.getConnection();
-        console.log('✅ Connected to CheckMate! SRMS Database');
-        connection.release();
-        return true;
+        // Check if tables already exist
+        const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
+        if (tables.length > 0) {
+            console.log('✅ Database tables already exist');
+            return;
+        }
+
+        console.log('🔧 Initializing database schema...');
+        const schemaPath = path.join(__dirname, 'database.sql');
+        if (fs.existsSync(schemaPath)) {
+            const schema = fs.readFileSync(schemaPath, 'utf8');
+            // Split by semicolons and execute each statement (skip empty)
+            const statements = schema
+                .split(';')
+                .map(s => s.trim())
+                .filter(s => s.length > 0 && !s.startsWith('--'));
+
+            for (const statement of statements) {
+                try {
+                    await connection.query(statement);
+                } catch (err) {
+                    // Ignore "already exists" and "duplicate" errors
+                    if (!err.message.includes('already exists') && !err.message.includes('Duplicate')) {
+                        console.warn('⚠️  Schema statement warning:', err.message.substring(0, 100));
+                    }
+                }
+            }
+            console.log('✅ Database schema initialized successfully');
+        } else {
+            console.log('⚠️  database.sql not found, skipping auto-init');
+        }
     } catch (error) {
-        console.error('❌ Database connection failed:', error.message);
-        console.log('Please ensure MySQL/MariaDB is running and the database is created using database.sql');
-        return false;
+        console.error('⚠️  Database initialization error:', error.message);
     }
+}
+
+// Test database connection with retry logic
+async function testConnection(retries = 5, delay = 3000) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const connection = await pool.getConnection();
+            console.log('✅ Connected to CheckMate! SRMS Database');
+            await initializeDatabase(connection);
+            connection.release();
+            dbReady = true;
+            return true;
+        } catch (error) {
+            console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, error.message);
+            if (attempt < retries) {
+                const waitTime = delay * attempt;
+                console.log(`⏳ Retrying in ${waitTime / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+        }
+    }
+    console.error('❌ All database connection attempts failed.');
+    console.log('💡 The server will start anyway. Database will be retried on first request.');
+    return false;
 }
 
 // Database helper functions
@@ -839,35 +910,61 @@ app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Start server
-async function startServer() {
-    try {
-        const dbConnected = await testConnection();
-        if (!dbConnected) {
-            console.log('⚠️  Database connection failed. Please check your MySQL configuration.');
-            process.exit(1);
-        }
-
-        app.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 CheckMate! SRMS Server running on port ${PORT}`);
-            console.log(`📱 Login page: http://localhost:${PORT}/login.html`);
-            console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
-            console.log(`📱 NFC Attendance: http://localhost:${PORT}/nfc-attendance.html`);
-            if (isProduction) {
-                console.log('🌐 Running in PRODUCTION mode');
-            }
-        });
-    } catch (error) {
-        console.error('Failed to start server:', error.message);
-        process.exit(1);
-    }
-}
-
-// Graceful shutdown
-process.on('SIGINT', async () => {
-    console.log('\n🔄 Shutting down CheckMate! SRMS gracefully...');
-    await pool.end();
-    process.exit(0);
+// Health check endpoint (Railway uses this)
+app.get('/api/health', (req, res) => {
+    res.json({
+        success: true,
+        status: 'running',
+        database: dbReady ? 'connected' : 'connecting',
+        timestamp: new Date().toISOString()
+    });
 });
 
+// Start server
+async function startServer() {
+    // Start HTTP server FIRST (Railway needs the port bound quickly)
+    const server = app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 CheckMate! SRMS Server running on port ${PORT}`);
+        console.log(`📱 Login page: http://localhost:${PORT}/login.html`);
+        console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
+        console.log(`📱 NFC Attendance: http://localhost:${PORT}/nfc-attendance.html`);
+        if (isProduction) {
+            console.log('🌐 Running in PRODUCTION mode');
+        }
+    });
+
+    // Then attempt database connection (with retries)
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+        console.log('⚠️  Server is running but database is not connected yet.');
+        console.log('💡 Database will be retried automatically on incoming requests.');
+
+        // Background retry every 15 seconds
+        const retryInterval = setInterval(async () => {
+            try {
+                const connection = await pool.getConnection();
+                console.log('✅ Database reconnected successfully!');
+                await initializeDatabase(connection);
+                connection.release();
+                dbReady = true;
+                clearInterval(retryInterval);
+            } catch (err) {
+                console.log('⏳ Still waiting for database...', err.message);
+            }
+        }, 15000);
+    }
+
+    // Graceful shutdown
+    const shutdown = async () => {
+        console.log('\n🔄 Shutting down CheckMate! SRMS gracefully...');
+        server.close();
+        await pool.end();
+        process.exit(0);
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+}
+
 startServer();
+

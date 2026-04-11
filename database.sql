@@ -1,7 +1,8 @@
 -- CheckMate! Student Record Management System (SRMS) Database Setup
--- Create database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS checkmate_srms;
-USE checkmate_srms;
+-- For local XAMPP setup, run these two lines manually first:
+-- CREATE DATABASE IF NOT EXISTS checkmate_srms;
+-- USE checkmate_srms;
+-- (Railway auto-provisions the database, so these are not needed there)
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
