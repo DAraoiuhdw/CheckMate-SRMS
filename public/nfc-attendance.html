@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NFC Tap-to-Attend - Mark student attendance instantly using NFC cards in CheckMate! SRMS.">
+    <title>NFC Attendance - CheckMate! SRMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="dark-mode">
+    <button class="mobile-menu-btn">☰</button>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon"><img src="/assets/logo.png" alt="Logo" style="width:26px;height:26px;border-radius:8px;"></div>
+                    <div class="sidebar-logo-text">CheckMate! SRMS</div>
+                </div>
+            </div>
+            <nav>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📊</span> Dashboard</a></li>
+                    <li class="sidebar-nav-item"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">👥</span> Students</a></li>
+                    <li class="sidebar-nav-item"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">✅</span> Attendance</a></li>
+                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📚</span> Grades</a></li>
+                    <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📢</span> Announcements</a></li>
+                    <li class="sidebar-nav-item"><a href="/nfc-attendance.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon">📱</span> NFC Attendance</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="dark-mode-toggle" style="position:static;margin-bottom:10px;width:100%;"><span class="toggle-icon">☀️</span></button>
+                <button id="logoutBtn" class="btn btn-secondary" style="width:100%;">Logout</button>
+            </div>
+        </aside>
+        
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 class="header-title">📱 NFC Tap-to-Attend</h1>
+                    <p class="header-subtitle">Mark attendance instantly by tapping NFC cards</p>
+                </div>
+                <div class="header-actions">
+                    <span class="badge badge-success" id="nfc-date-badge">📅 Today</span>
+                </div>
+            </header>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📱</div>
+                    <div class="stat-value" id="nfc-scan-count">0</div>
+                    <div class="stat-label">Scanned Today</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value" id="nfc-present-count">—</div>
+                    <div class="stat-label">Marked Present</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-value" id="nfc-last-scan">—</div>
+                    <div class="stat-label">Last Scan</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📶</div>
+                    <div class="stat-value" id="nfc-status-badge" style="font-size: 18px;">Ready</div>
+                    <div class="stat-label">Scanner Status</div>
+                </div>
+            </div>
+            
+            <!-- NFC Scanner Area -->
+            <div class="card">
+                <div class="nfc-scanner-container">
+                    <!-- Compatibility Warning (hidden by default) -->
+                    <div id="nfc-compat-warning" class="nfc-compatibility-warning" style="display:none;">
+                        <strong>⚠️ Web NFC Not Supported</strong><br>
+                        Your browser doesn't support NFC scanning. Web NFC requires <strong>Chrome on Android</strong>.<br>
+                        You can still use the <strong>Manual Check-in</strong> option below.
+                    </div>
+                    
+                    <!-- Scan Area -->
+                    <div id="nfc-scan-area" class="nfc-scan-area">
+                        <span class="nfc-icon">📱</span>
+                    </div>
+                    
+                    <h2 id="nfc-status-text" class="nfc-status-text">Ready to Scan</h2>
+                    <p id="nfc-sub-text" class="nfc-sub-text">Press Start Scanning and hold a student's NFC card near the device</p>
+                    
+                    <!-- Student Popup (shown on scan) -->
+                    <div id="nfc-student-popup" class="nfc-student-popup" style="display:none;"></div>
+                    
+                    <!-- Controls -->
+                    <div style="display:flex;gap:12px;margin-top:24px;flex-wrap:wrap;justify-content:center;">
+                        <button id="nfc-start-btn" onclick="startNFCScan()" class="btn btn-success btn-lg">
+                            📱 Start Scanning
+                        </button>
+                        <button onclick="openManualCheckin()" class="btn btn-secondary btn-lg">
+                            ✍️ Manual Check-in
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- NFC Scan Log -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📋 Today's NFC Scan Log</h2>
+                    <button class="btn btn-sm btn-secondary" onclick="clearNFCLog()">Clear Log</button>
+                </div>
+                <div id="nfc-log-list" class="nfc-log-list">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📱</div>
+                        <div class="empty-state-text">No scans yet</div>
+                        <div class="empty-state-sub">Start scanning to see attendance records here</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Manual Check-in Section -->
+            <div class="card" id="manual-checkin-section" style="display:none;">
+                <div class="card-header">
+                    <h2 class="card-title">✍️ Manual Check-in</h2>
+                    <button class="btn btn-sm btn-secondary" onclick="document.getElementById('manual-checkin-section').style.display='none'">Close</button>
+                </div>
+                <p style="color:var(--text-secondary);margin-bottom:15px;font-size:14px;">
+                    Search for a student and mark them as present manually.
+                </p>
+                <div class="search-bar">
+                    <input type="text" id="manual-search" class="search-input" placeholder="🔍 Type student name to search..." oninput="searchForManualCheckin(this.value)">
+                </div>
+                <div id="manual-search-results" style="max-height:300px;overflow-y:auto;"></div>
+            </div>
+            
+            <!-- NFC Tag Assignment Helper -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🏷️ NFC Tag Management</h2>
+                    <button onclick="toggleAssignSection()" class="btn btn-sm btn-info">Assign Tags</button>
+                </div>
+                <p style="color:var(--text-secondary);font-size:14px;">
+                    Assign NFC tags or cards to students. Each student can have one tag. 
+                    NFC stickers/cards cost as low as $0.10 each.
+                </p>
+                <div id="nfc-assign-section" style="display:none;margin-top:15px;">
+                    <div class="search-bar">
+                        <input type="text" id="nfc-assign-search" class="search-input" placeholder="🔍 Search student to assign NFC tag..." oninput="searchForNFCAssign(this.value)">
+                    </div>
+                    <div id="nfc-assign-results" style="max-height:300px;overflow-y:auto;"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/js/script.js"></script>
+    <script>
+        function openManualCheckin() {
+            const section = document.getElementById('manual-checkin-section');
+            section.style.display = 'block';
+            section.scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('manual-search').focus();
+        }
+        
+        async function searchForManualCheckin(query) {
+            const container = document.getElementById('manual-search-results');
+            if (!query || query.length < 2) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-sub">Type at least 2 characters...</div></div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/students/search/${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.success && data.data.length > 0) {
+                    container.innerHTML = data.data.map(student => `
+                        <div class="nfc-log-item" style="cursor:pointer;" onclick="manualMarkPresent(${student.id}, '${escapeHtml(student.student_name).replace(/'/g, "\\'")}')">
+                            <div>
+                                <span class="student-name">${escapeHtml(student.student_name)}</span>
+                                <span style="color:var(--text-muted);font-size:11px;margin-left:8px;">${escapeHtml(student.section_name || '')}</span>
+                            </div>
+                            <button class="btn btn-sm btn-success">✅ Mark Present</button>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-sub">No students found</div></div>';
+                }
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-sub">Search failed</div></div>';
+            }
+        }
+        
+        async function manualMarkPresent(studentId, studentName) {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const response = await fetch('/api/attendance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ attendanceRecords: [{ student_id: studentId, status: 'Present', remarks: 'Manual NFC Page Check-in' }] })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showNotification(`✅ ${studentName} marked as Present`, 'success');
+                    addNFCLogEntry(studentName, 'Present (Manual)');
+                    playNotificationSound('success');
+                } else {
+                    showNotification('Failed to mark attendance', 'error');
+                }
+            } catch (error) {
+                showNotification('Network error', 'error');
+            }
+        }
+        
+        function toggleAssignSection() {
+            const section = document.getElementById('nfc-assign-section');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            if (section.style.display === 'block') {
+                document.getElementById('nfc-assign-search').focus();
+            }
+        }
+        
+        async function searchForNFCAssign(query) {
+            const container = document.getElementById('nfc-assign-results');
+            if (!query || query.length < 2) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/students/search/${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.success && data.data.length > 0) {
+                    container.innerHTML = data.data.map(student => `
+                        <div class="nfc-log-item">
+                            <div>
+                                <span class="student-name">${escapeHtml(student.student_name)}</span>
+                                <span style="color:var(--text-muted);font-size:11px;margin-left:8px;">
+                                    ${student.nfc_tag_id ? `🏷️ ${student.nfc_tag_id.substring(0,12)}...` : 'No tag'}
+                                </span>
+                            </div>
+                            <button class="btn btn-sm btn-info" onclick="assignNFCTag(${student.id})">
+                                ${student.nfc_tag_id ? '🔄 Reassign' : '🏷️ Assign Tag'}
+                            </button>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-sub">No students found</div></div>';
+                }
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-sub">Search failed</div></div>';
+            }
+        }
+        
+        function clearNFCLog() {
+            const logList = document.getElementById('nfc-log-list');
+            logList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📱</div><div class="empty-state-text">Log cleared</div></div>';
+            updateStatCard('nfc-scan-count', 0);
+        }
+        
+        // Update date badge
+        document.addEventListener('DOMContentLoaded', function() {
+            const dateBadge = document.getElementById('nfc-date-badge');
+            if (dateBadge) {
+                const today = new Date();
+                dateBadge.textContent = '📅 ' + today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            }
+        });
+    </script>
+</body>
+</html>

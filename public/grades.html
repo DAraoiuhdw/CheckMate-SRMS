@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage student grades and academic performance in CheckMate! SRMS.">
+    <title>Grades - CheckMate! SRMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="dark-mode">
+    <button class="mobile-menu-btn">☰</button>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon"><img src="/assets/logo.png" alt="Logo" style="width:26px;height:26px;border-radius:8px;"></div>
+                    <div class="sidebar-logo-text">CheckMate! SRMS</div>
+                </div>
+            </div>
+            <nav>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📊</span> Dashboard</a></li>
+                    <li class="sidebar-nav-item"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">👥</span> Students</a></li>
+                    <li class="sidebar-nav-item"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">✅</span> Attendance</a></li>
+                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon">📚</span> Grades</a></li>
+                    <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📢</span> Announcements</a></li>
+                    <li class="sidebar-nav-item"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon">📱</span> NFC Attendance</a></li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="dark-mode-toggle" style="position:static;margin-bottom:10px;width:100%;"><span class="toggle-icon">☀️</span></button>
+                <button id="logoutBtn" class="btn btn-secondary" style="width:100%;">Logout</button>
+            </div>
+        </aside>
+        
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h1 class="header-title">Grade Management</h1>
+                    <p class="header-subtitle">Manage student grades and academic performance</p>
+                </div>
+                <div class="header-actions">
+                    <button onclick="openModal('add-grade-modal')" class="btn btn-success">➕ Add Grade</button>
+                </div>
+            </header>
+            
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-icon">📚</div><div class="stat-value" id="total-grades">0</div><div class="stat-label">Total Grades</div></div>
+                <div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-value" id="average-score">0</div><div class="stat-label">Average Score</div></div>
+                <div class="stat-card"><div class="stat-icon">🏆</div><div class="stat-value" id="highest-score">0</div><div class="stat-label">Highest Score</div></div>
+                <div class="stat-card"><div class="stat-icon">📈</div><div class="stat-value" id="pass-rate">0%</div><div class="stat-label">Pass Rate</div></div>
+            </div>
+            
+            <div class="card">
+                <div class="search-bar">
+                    <input type="text" id="grade-search" class="search-input" placeholder="🔍 Search by student name or subject..." onkeyup="searchGradesLocal(this.value)">
+                    <button class="btn btn-secondary" onclick="loadGrades()">🔄 Refresh</button>
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <select id="student-filter" class="form-select" style="width:auto;" onchange="filterGrades()">
+                        <option value="">All Students</option>
+                    </select>
+                    <select id="subject-filter" class="form-select" style="width:auto;" onchange="filterGrades()">
+                        <option value="">All Subjects</option>
+                        <option value="Mathematics">Mathematics</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Calculous">Calculous</option>
+                        <option value="Physics">Physics</option>
+                    </select>
+                    <select id="semester-filter" class="form-select" style="width:auto;" onchange="filterGrades()">
+                        <option value="">All Semesters</option>
+                        <option value="First">First Semester</option>
+                        <option value="Second">Second Semester</option>
+                    </select>
+                    <button class="btn btn-info" onclick="exportGrades()">📥 Export CSV</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Student Name</th>
+                            <th>Section</th>
+                            <th>Subject</th>
+                            <th>Grade</th>
+                            <th>Score</th>
+                            <th>Semester</th>
+                            <th>Academic Year</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="grades-tbody">
+                        <tr><td colspan="8" class="text-center"><div class="loading"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Add Grade Modal -->
+    <div id="add-grade-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Add New Grade</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="add-grade-form">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+                    <div class="form-group">
+                        <label class="form-label">Student *</label>
+                        <select id="grade-student" name="student_id" class="form-select" required>
+                            <option value="">Select Student</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Subject *</label>
+                        <input type="text" id="grade-subject" name="subject" class="form-input" placeholder="Enter subject" list="subjects-list" required>
+                        <datalist id="subjects-list">
+                            <option value="Mathematics">
+                            <option value="Science">
+                            <option value="English">
+                            <option value="History">
+                            <option value="Calculous">
+                            <option value="Physics">
+                            <option value="Computer Science">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Grade *</label>
+                        <select id="grade-grade" name="grade" class="form-select" required>
+                            <option value="">Select Grade</option>
+                            <option value="A+">A+ (90-100)</option>
+                            <option value="A">A (85-89)</option>
+                            <option value="A-">A- (80-84)</option>
+                            <option value="B+">B+ (75-79)</option>
+                            <option value="B">B (70-74)</option>
+                            <option value="B-">B- (65-69)</option>
+                            <option value="C+">C+ (60-64)</option>
+                            <option value="C">C (55-59)</option>
+                            <option value="C-">C- (50-54)</option>
+                            <option value="D">D (45-49)</option>
+                            <option value="F">F (Below 45)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Score</label>
+                        <input type="number" id="grade-score" name="score" class="form-input" placeholder="e.g., 85" min="0" max="100" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Max Score</label>
+                        <input type="number" id="grade-max-score" name="max_score" class="form-input" placeholder="e.g., 100" min="1" max="200" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Semester</label>
+                        <select id="grade-semester" name="semester" class="form-select">
+                            <option value="">Select Semester</option>
+                            <option value="First">First Semester</option>
+                            <option value="Second">Second Semester</option>
+                            <option value="Summer">Summer</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label class="form-label">Academic Year</label>
+                        <input type="text" id="grade-academic-year" name="academic_year" class="form-input" placeholder="e.g., 2023-2024" value="2023-2024">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-grade-modal')">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="addGrade()">📚 Add Grade</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/js/script.js"></script>
+    <script>
+        // Local overrides for grades page
+        let allGradesData = [];
+
+        async function loadGrades() {
+            try {
+                showLoading('grades-tbody');
+                const response = await fetch('/api/grades');
+                const data = await response.json();
+                if (data.success) {
+                    allGradesData = data.data;
+                    displayGrades(data.data);
+                    updateGradeStatistics(data.data);
+                }
+            } catch (error) {
+                showNotification('Network error', 'error');
+            }
+        }
+
+        function updateGradeStatistics(grades) {
+            const total = grades.length;
+            const withScores = grades.filter(g => g.score != null);
+            let avg = 0, highest = 0, passRate = 0;
+            if (withScores.length > 0) {
+                avg = (withScores.reduce((s,g) => s + parseFloat(g.score), 0) / withScores.length).toFixed(1);
+                highest = Math.max(...withScores.map(g => parseFloat(g.score)));
+                const passed = withScores.filter(g => (parseFloat(g.score) / (parseFloat(g.max_score)||100)) >= 0.5);
+                passRate = Math.round((passed.length / withScores.length) * 100);
+            }
+            updateStatCard('total-grades', total);
+            updateStatCard('average-score', avg);
+            updateStatCard('highest-score', highest);
+            updateStatCard('pass-rate', passRate + '%');
+        }
+
+        function searchGradesLocal(query) {
+            if (!query) { displayGrades(allGradesData); return; }
+            const q = query.toLowerCase();
+            const filtered = allGradesData.filter(g =>
+                g.student_name.toLowerCase().includes(q) || g.subject.toLowerCase().includes(q)
+            );
+            displayGrades(filtered);
+        }
+
+        function filterGrades() {
+            const student = document.getElementById('student-filter').value;
+            const subject = document.getElementById('subject-filter').value;
+            const semester = document.getElementById('semester-filter').value;
+            const params = new URLSearchParams();
+            if (student) params.append('student_id', student);
+            if (subject) params.append('subject', subject);
+            if (semester) params.append('semester', semester);
+            const url = params.toString() ? `/api/grades?${params}` : '/api/grades';
+            fetch(url).then(r => r.json()).then(data => {
+                if (data.success) { allGradesData = data.data; displayGrades(data.data); updateGradeStatistics(data.data); }
+            }).catch(() => showNotification('Error', 'error'));
+        }
+
+        // Auto-calculate grade from score
+        document.addEventListener('DOMContentLoaded', function() {
+            const scoreInput = document.getElementById('grade-score');
+            const maxInput = document.getElementById('grade-max-score');
+            const gradeSelect = document.getElementById('grade-grade');
+            if (scoreInput && maxInput && gradeSelect) {
+                function calcGrade() {
+                    const s = parseFloat(scoreInput.value), m = parseFloat(maxInput.value) || 100;
+                    if (!isNaN(s) && s >= 0 && m > 0) {
+                        const pct = (s/m)*100;
+                        let g = '';
+                        if (pct>=90) g='A+'; else if (pct>=85) g='A'; else if (pct>=80) g='A-';
+                        else if (pct>=75) g='B+'; else if (pct>=70) g='B'; else if (pct>=65) g='B-';
+                        else if (pct>=60) g='C+'; else if (pct>=55) g='C'; else if (pct>=50) g='C-';
+                        else if (pct>=45) g='D'; else g='F';
+                        gradeSelect.value = g;
+                    }
+                }
+                scoreInput.addEventListener('input', calcGrade);
+                maxInput.addEventListener('input', calcGrade);
+            }
+        });
+    </script>
+</body>
+</html>

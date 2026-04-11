@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CheckMate! SRMS Dashboard - Overview of student records, attendance, grades, and announcements.">
+    <title>Dashboard - CheckMate! SRMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="dark-mode">
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn">☰</button>
+
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">
+                        <img src="/assets/logo.png" alt="CheckMate SRMS Logo" style="width: 26px; height: 26px; border-radius: 8px;">
+                    </div>
+                    <div class="sidebar-logo-text">CheckMate! SRMS</div>
+                </div>
+            </div>
+            
+            <nav>
+                <ul class="sidebar-nav">
+                    <li class="sidebar-nav-item">
+                        <a href="/dashboard.html" class="sidebar-nav-link active">
+                            <span class="sidebar-nav-icon">📊</span> Dashboard
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/students.html" class="sidebar-nav-link">
+                            <span class="sidebar-nav-icon">👥</span> Students
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/attendance.html" class="sidebar-nav-link">
+                            <span class="sidebar-nav-icon">✅</span> Attendance
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/grades.html" class="sidebar-nav-link">
+                            <span class="sidebar-nav-icon">📚</span> Grades
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/announcements.html" class="sidebar-nav-link">
+                            <span class="sidebar-nav-icon">📢</span> Announcements
+                        </a>
+                    </li>
+                    <li class="sidebar-nav-item">
+                        <a href="/nfc-attendance.html" class="sidebar-nav-link">
+                            <span class="sidebar-nav-icon">📱</span> NFC Attendance
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="sidebar-user-card">
+                    <div class="sidebar-user-status">
+                        <div class="status-dot"></div>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Online</span>
+                    </div>
+                    <div class="sidebar-user-name user-name">User</div>
+                    <div class="sidebar-user-email user-email">user@example.com</div>
+                    <div class="sidebar-user-role user-role">Role</div>
+                </div>
+                <button class="dark-mode-toggle" style="position: static; margin-bottom: 10px; width: 100%;">
+                    <span class="toggle-icon">☀️</span>
+                </button>
+                <button id="logoutBtn" class="btn btn-secondary" style="width: 100%;">
+                    Logout
+                </button>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div>
+                    <h1 class="header-title">Dashboard</h1>
+                    <p class="header-subtitle">Welcome back, <span class="user-name">User</span>! Here's your overview.</p>
+                </div>
+                <div class="header-actions">
+                    <button onclick="openModal('quick-action-modal')" class="btn btn-success">
+                        ⚡ Quick Actions
+                    </button>
+                </div>
+            </header>
+            
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card fade-in">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value" id="total-students">0</div>
+                    <div class="stat-label">Total Students</div>
+                </div>
+                <div class="stat-card fade-in">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value" id="today-attendance">0</div>
+                    <div class="stat-label">Today's Attendance</div>
+                </div>
+                <div class="stat-card fade-in">
+                    <div class="stat-icon">📚</div>
+                    <div class="stat-value" id="total-grades">0</div>
+                    <div class="stat-label">Grade Records</div>
+                </div>
+                <div class="stat-card fade-in">
+                    <div class="stat-icon">📢</div>
+                    <div class="stat-value" id="active-announcements">0</div>
+                    <div class="stat-label">Active Announcements</div>
+                </div>
+            </div>
+            
+            <!-- Attendance Overview -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Today's Attendance Overview</h2>
+                    <a href="/attendance.html" class="btn btn-sm btn-secondary">View Details</a>
+                </div>
+                <div class="stats-grid" style="margin-bottom: 0;">
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-value" id="present-today">0</div>
+                        <div class="stat-label">Present</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">❌</div>
+                        <div class="stat-value" id="absent-today">0</div>
+                        <div class="stat-label">Absent</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📜</div>
+                        <div class="stat-value" id="excused-today">0</div>
+                        <div class="stat-label">Excused</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Latest Announcements -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Latest Announcements</h2>
+                    <a href="/announcements.html" class="btn btn-sm btn-secondary">View All</a>
+                </div>
+                <div id="latest-announcements">
+                    <div class="text-center" style="padding: 30px;">
+                        <div class="loading"></div>
+                        <p style="margin-top: 10px; color: var(--text-secondary);">Loading announcements...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Quick Actions</h2>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                    <a href="/attendance.html" class="btn btn-success" style="text-align: center;">
+                        ✅ Mark Attendance
+                    </a>
+                    <a href="/nfc-attendance.html" class="btn btn-info" style="text-align: center;">
+                        📱 NFC Scan
+                    </a>
+                    <a href="/students.html" class="btn btn-secondary" style="text-align: center;">
+                        👥 Add Student
+                    </a>
+                    <a href="/grades.html" class="btn btn-warning" style="text-align: center;">
+                        📚 Add Grade
+                    </a>
+                    <a href="/announcements.html" class="btn btn-danger" style="text-align: center;">
+                        📢 Announcement
+                    </a>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Quick Action Modal -->
+    <div id="quick-action-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Quick Actions</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div style="display: grid; gap: 12px;">
+                <a href="/attendance.html" class="btn btn-success w-full">✅ Mark Today's Attendance</a>
+                <a href="/nfc-attendance.html" class="btn btn-info w-full">📱 NFC Tap-to-Attend</a>
+                <a href="/students.html" class="btn btn-secondary w-full">👥 Register New Student</a>
+                <a href="/grades.html" class="btn btn-warning w-full">📚 Record Student Grades</a>
+                <a href="/announcements.html" class="btn btn-danger w-full">📢 Create Announcement</a>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('quick-action-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/js/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Login to CheckMate! SRMS - Student Record Management System for attendance, grades, and student record management.">
+    <title>Login - CheckMate! SRMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="dark-mode">
+    <!-- Wallpaper Background -->
+    <div class="wallpaper-bg"></div>
+    <div class="wallpaper-overlay"></div>
+    
+    <!-- Login Container -->
+    <div class="login-container">
+        <div class="login-card fade-in">
+            <!-- Dark Mode Toggle -->
+            <button class="dark-mode-toggle" id="login-theme-toggle">
+                <span class="toggle-icon">☀️</span>
+            </button>
+            
+            <!-- Logo Section -->
+            <div class="logo-container">
+                <div class="logo">
+                    <img src="/assets/logo.png" alt="CheckMate SRMS Logo" style="width: 45px; height: 45px; border-radius: 10px;">
+                </div>
+                <h1 class="app-title">CheckMate! SRMS</h1>
+                <p class="app-subtitle">Student Record Management System</p>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="loginForm">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email Address</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        class="form-input" 
+                        placeholder="Enter your email"
+                        required
+                        autocomplete="email"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        class="form-input" 
+                        placeholder="Enter your password"
+                        required
+                        autocomplete="current-password"
+                    >
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    Sign In to SRMS
+                </button>
+            </form>
+            
+            <!-- Demo Account Info -->
+            <div style="margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border-color);">
+                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 10px; font-weight: 600;">
+                    Demo Accounts:
+                </p>
+                <div style="display: grid; gap: 8px; font-size: 12px; color: var(--text-secondary);">
+                    <div style="padding: 10px 12px; background: var(--bg-base); border-radius: 10px; border: 1px solid var(--border-color);">
+                        <strong style="color: var(--primary-green);">Admin:</strong> admin@checkmate-srms.com / admin123
+                    </div>
+                    <div style="padding: 10px 12px; background: var(--bg-base); border-radius: 10px; border: 1px solid var(--border-color);">
+                        <strong style="color: var(--primary-blue);">Teacher:</strong> teacher@checkmate-srms.com / teacher123
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Info -->
+            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+                <p style="color: var(--text-muted); font-size: 11px; text-align: center;">
+                    © 2024 CheckMate! Student Record Management System<br>
+                    Comprehensive Student Management Solution
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/js/script.js"></script>
+</body>
+</html>
