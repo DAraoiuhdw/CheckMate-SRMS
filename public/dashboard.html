@@ -3,205 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CheckMate! SRMS Dashboard - Overview of student records, attendance, grades, and announcements.">
-    <title>Dashboard - CheckMate! SRMS</title>
+    <meta name="description" content="S.M.A.R.T Dashboard - Overview of student records, attendance, grades, and announcements.">
+    <title>Dashboard - S.M.A.R.T</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body class="dark-mode">
-    <!-- Mobile Menu Button -->
-    <button class="mobile-menu-btn">☰</button>
+<body>
+    <button class="mobile-menu-btn"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
 
     <div class="dashboard-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <div class="sidebar-logo-icon">
-                        <img src="/assets/logo.png" alt="CheckMate SRMS Logo" style="width: 26px; height: 26px; border-radius: 8px;">
-                    </div>
-                    <div class="sidebar-logo-text">CheckMate! SRMS</div>
+                    <div class="sidebar-logo-icon">SM</div>
+                    <div class="sidebar-logo-text">S.M.A.R.T</div>
                 </div>
             </div>
-            
             <nav>
                 <ul class="sidebar-nav">
-                    <li class="sidebar-nav-item">
-                        <a href="/dashboard.html" class="sidebar-nav-link active">
-                            <span class="sidebar-nav-icon">📊</span> Dashboard
-                        </a>
-                    </li>
-                    <li class="sidebar-nav-item">
-                        <a href="/students.html" class="sidebar-nav-link">
-                            <span class="sidebar-nav-icon">👥</span> Students
-                        </a>
-                    </li>
-                    <li class="sidebar-nav-item">
-                        <a href="/attendance.html" class="sidebar-nav-link">
-                            <span class="sidebar-nav-icon">✅</span> Attendance
-                        </a>
-                    </li>
-                    <li class="sidebar-nav-item">
-                        <a href="/grades.html" class="sidebar-nav-link">
-                            <span class="sidebar-nav-icon">📚</span> Grades
-                        </a>
-                    </li>
-                    <li class="sidebar-nav-item">
-                        <a href="/announcements.html" class="sidebar-nav-link">
-                            <span class="sidebar-nav-icon">📢</span> Announcements
-                        </a>
-                    </li>
-                    <li class="sidebar-nav-item">
-                        <a href="/nfc-attendance.html" class="sidebar-nav-link">
-                            <span class="sidebar-nav-icon">📱</span> NFC Attendance
-                        </a>
-                    </li>
+                    <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
+                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
+                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
+                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
+                    <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
+                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
+                    <li class="sidebar-nav-item" data-role="admin"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
                 </ul>
             </nav>
-            
             <div class="sidebar-footer">
                 <div class="sidebar-user-card">
                     <div class="sidebar-user-status">
                         <div class="status-dot"></div>
-                        <span style="font-size: 12px; color: var(--text-secondary);">Online</span>
+                        <span style="font-size:12px;color:var(--text-secondary);">Online</span>
                     </div>
                     <div class="sidebar-user-name user-name">User</div>
                     <div class="sidebar-user-email user-email">user@example.com</div>
                     <div class="sidebar-user-role user-role">Role</div>
                 </div>
-                <button class="dark-mode-toggle" style="position: static; margin-bottom: 10px; width: 100%;">
-                    <span class="toggle-icon">☀️</span>
-                </button>
-                <button id="logoutBtn" class="btn btn-secondary" style="width: 100%;">
-                    Logout
-                </button>
+                <button class="dark-mode-toggle" style="position:static;margin-bottom:8px;width:100%;"><span class="toggle-icon"></span></button>
+                <button id="logoutBtn" class="btn btn-secondary" style="width:100%;">Logout</button>
             </div>
         </aside>
         
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="header">
                 <div>
                     <h1 class="header-title">Dashboard</h1>
                     <p class="header-subtitle">Welcome back, <span class="user-name">User</span>! Here's your overview.</p>
                 </div>
-                <div class="header-actions">
-                    <button onclick="openModal('quick-action-modal')" class="btn btn-success">
-                        ⚡ Quick Actions
-                    </button>
-                </div>
             </header>
             
-            <!-- Stats Grid -->
-            <div class="stats-grid">
+            <div class="stats-grid" data-role="admin,teacher">
                 <div class="stat-card fade-in">
-                    <div class="stat-icon">👥</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
                     <div class="stat-value" id="total-students">0</div>
                     <div class="stat-label">Total Students</div>
                 </div>
                 <div class="stat-card fade-in">
-                    <div class="stat-icon">📊</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
                     <div class="stat-value" id="today-attendance">0</div>
                     <div class="stat-label">Today's Attendance</div>
                 </div>
                 <div class="stat-card fade-in">
-                    <div class="stat-icon">📚</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
                     <div class="stat-value" id="total-grades">0</div>
                     <div class="stat-label">Grade Records</div>
                 </div>
                 <div class="stat-card fade-in">
-                    <div class="stat-icon">📢</div>
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
                     <div class="stat-value" id="active-announcements">0</div>
-                    <div class="stat-label">Active Announcements</div>
+                    <div class="stat-label">Announcements</div>
+                </div>
+            </div>
+
+            <div class="stats-grid" data-role="student">
+                <div class="stat-card fade-in">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+                    <div class="stat-value" id="total-grades">0</div>
+                    <div class="stat-label">My Grades</div>
+                </div>
+                <div class="stat-card fade-in">
+                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+                    <div class="stat-value" id="active-announcements">0</div>
+                    <div class="stat-label">Announcements</div>
                 </div>
             </div>
             
-            <!-- Attendance Overview -->
-            <div class="card">
+            <div class="card" data-role="admin,teacher">
                 <div class="card-header">
                     <h2 class="card-title">Today's Attendance Overview</h2>
                     <a href="/attendance.html" class="btn btn-sm btn-secondary">View Details</a>
                 </div>
-                <div class="stats-grid" style="margin-bottom: 0;">
+                <div class="stats-grid" style="margin-bottom:0;">
                     <div class="stat-card">
-                        <div class="stat-icon">✅</div>
+                        <div class="stat-icon" style="background:var(--badge-success-bg);color:var(--success);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
                         <div class="stat-value" id="present-today">0</div>
                         <div class="stat-label">Present</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">❌</div>
+                        <div class="stat-icon" style="background:var(--badge-danger-bg);color:var(--danger);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
                         <div class="stat-value" id="absent-today">0</div>
                         <div class="stat-label">Absent</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">📜</div>
+                        <div class="stat-icon" style="background:var(--badge-warning-bg);color:var(--warning);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                         <div class="stat-value" id="excused-today">0</div>
                         <div class="stat-label">Excused</div>
                     </div>
                 </div>
             </div>
             
-            <!-- Latest Announcements -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">Latest Announcements</h2>
                     <a href="/announcements.html" class="btn btn-sm btn-secondary">View All</a>
                 </div>
                 <div id="latest-announcements">
-                    <div class="text-center" style="padding: 30px;">
+                    <div class="text-center" style="padding:24px;">
                         <div class="loading"></div>
-                        <p style="margin-top: 10px; color: var(--text-secondary);">Loading announcements...</p>
+                        <p style="margin-top:8px;color:var(--text-secondary);">Loading announcements...</p>
                     </div>
                 </div>
             </div>
             
-            <!-- Quick Actions -->
-            <div class="card">
+            <div class="card" data-role="admin,teacher">
                 <div class="card-header">
                     <h2 class="card-title">Quick Actions</h2>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-                    <a href="/attendance.html" class="btn btn-success" style="text-align: center;">
-                        ✅ Mark Attendance
-                    </a>
-                    <a href="/nfc-attendance.html" class="btn btn-info" style="text-align: center;">
-                        📱 NFC Scan
-                    </a>
-                    <a href="/students.html" class="btn btn-secondary" style="text-align: center;">
-                        👥 Add Student
-                    </a>
-                    <a href="/grades.html" class="btn btn-warning" style="text-align: center;">
-                        📚 Add Grade
-                    </a>
-                    <a href="/announcements.html" class="btn btn-danger" style="text-align: center;">
-                        📢 Announcement
-                    </a>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+                    <a href="/attendance.html" class="btn btn-success" style="text-align:center;">Mark Attendance</a>
+                    <a href="/nfc-attendance.html" class="btn btn-info" style="text-align:center;">NFC Scan</a>
+                    <a href="/students.html" class="btn btn-secondary" style="text-align:center;">Add Student</a>
+                    <a href="/grades.html" class="btn btn-warning" data-role="teacher" style="text-align:center;">Add Grade</a>
+                    <a href="/announcements.html" class="btn btn-danger" style="text-align:center;">Announcement</a>
                 </div>
             </div>
         </main>
-    </div>
-    
-    <!-- Quick Action Modal -->
-    <div id="quick-action-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Quick Actions</h2>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div style="display: grid; gap: 12px;">
-                <a href="/attendance.html" class="btn btn-success w-full">✅ Mark Today's Attendance</a>
-                <a href="/nfc-attendance.html" class="btn btn-info w-full">📱 NFC Tap-to-Attend</a>
-                <a href="/students.html" class="btn btn-secondary w-full">👥 Register New Student</a>
-                <a href="/grades.html" class="btn btn-warning w-full">📚 Record Student Grades</a>
-                <a href="/announcements.html" class="btn btn-danger w-full">📢 Create Announcement</a>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeModal('quick-action-modal')">Close</button>
-            </div>
-        </div>
     </div>
     
     <script src="/js/script.js"></script>

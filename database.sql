@@ -1,4 +1,4 @@
--- CheckMate! Student Record Management System (SRMS) Database Setup
+-- S.M.A.R.T (Student Management And Record Tracking) Database Setup
 -- For local XAMPP setup, run these two lines manually first:
 -- CREATE DATABASE IF NOT EXISTS checkmate_srms;
 -- USE checkmate_srms;
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS sections (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Students table (with NFC support)
+-- Students table (with NFC support + archive)
 CREATE TABLE IF NOT EXISTS students (
     id INT PRIMARY KEY AUTO_INCREMENT,
     student_name VARCHAR(100) NOT NULL,
@@ -33,24 +33,28 @@ CREATE TABLE IF NOT EXISTS students (
     gender VARCHAR(10),
     enrollment_date DATE DEFAULT (CURRENT_DATE),
     nfc_tag_id VARCHAR(100) DEFAULT NULL,
+    is_archived TINYINT(1) DEFAULT 0,
+    archived_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE SET NULL,
     UNIQUE KEY unique_nfc_tag (nfc_tag_id)
 );
 
--- Attendance table
+-- Attendance table (with archive)
 CREATE TABLE IF NOT EXISTS attendance (
     id INT PRIMARY KEY AUTO_INCREMENT,
     student_id INT NOT NULL,
     date DATE NOT NULL,
     status VARCHAR(20) NOT NULL,
     remarks TEXT,
+    is_archived TINYINT(1) DEFAULT 0,
+    archived_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     UNIQUE KEY unique_attendance (student_id, date)
 );
 
--- Grades table
+-- Grades table (with archive)
 CREATE TABLE IF NOT EXISTS grades (
     id INT PRIMARY KEY AUTO_INCREMENT,
     student_id INT NOT NULL,
@@ -60,11 +64,13 @@ CREATE TABLE IF NOT EXISTS grades (
     max_score DECIMAL(5,2),
     semester VARCHAR(20),
     academic_year VARCHAR(20),
+    is_archived TINYINT(1) DEFAULT 0,
+    archived_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
--- Announcements table
+-- Announcements table (with archive)
 CREATE TABLE IF NOT EXISTS announcements (
     id INT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(255) NOT NULL,
@@ -72,14 +78,17 @@ CREATE TABLE IF NOT EXISTS announcements (
     target_audience VARCHAR(50) DEFAULT 'all',
     priority VARCHAR(20) DEFAULT 'normal',
     expires_at DATE,
+    is_archived TINYINT(1) DEFAULT 0,
+    archived_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Insert default admin user (password: admin123)
+-- Insert default users (admin, teacher, student)
 INSERT IGNORE INTO users (name, email, password, role) VALUES 
-('System Administrator', 'admin@checkmate-srms.com', 'admin123', 'admin'),
-('Demo Teacher', 'teacher@checkmate-srms.com', 'teacher123', 'teacher');
+('System Administrator', 'admin@smart-srms.com', 'admin123', 'admin'),
+('Demo Teacher', 'teacher@smart-srms.com', 'teacher123', 'teacher'),
+('John Michael Smith', 'john.smith@email.com', 'student123', 'student');
 
 -- Insert sample sections
 INSERT IGNORE INTO sections (section_name) VALUES 
@@ -111,22 +120,28 @@ INSERT IGNORE INTO students (student_name, section_id, email, phone, address, da
 
 -- Insert sample grades
 INSERT IGNORE INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES 
-(1, 'Calculous', 'A+', 95.5, 100, 'First', '2023-2024'),
+(1, 'Calculus', 'A+', 95.5, 100, 'First', '2023-2024'),
 (1, 'Physics', 'A', 88.0, 100, 'First', '2023-2024'),
 (1, 'English', 'B+', 82.5, 100, 'First', '2023-2024'),
-(2, 'Calculous', 'A', 91.0, 100, 'First', '2023-2024'),
+(2, 'Calculus', 'A', 91.0, 100, 'First', '2023-2024'),
 (2, 'Physics', 'A+', 96.5, 100, 'First', '2023-2024'),
 (2, 'English', 'A', 89.0, 100, 'First', '2023-2024');
 
--- Insert sample announcements with enhanced features
+-- Insert sample announcements
 INSERT IGNORE INTO announcements (title, content, target_audience, priority, expires_at) VALUES 
-('Welcome to CheckMate! SRMS', 'Welcome to the Student Record Management System. This comprehensive platform helps manage student records, attendance, grades, and communications efficiently.', 'all', 'high', '2025-12-31'),
-('System Features Overview', 'Key features include: Student Management, Attendance Tracking, Grade Management, Announcements, NFC Attendance, and Comprehensive Reporting. Please explore all modules.', 'all', 'normal', '2025-12-31'),
-('Academic Calendar 2023-2024', 'First Semester: June - October | Second Semester: November - March. Please mark your calendars for important dates and events.', 'all', 'high', '2025-03-31'),
-('New Student Registration', 'New student registration for the upcoming academic year is now open. Please submit all required documents before the deadline.', 'parents', 'normal', '2025-05-31'),
-('Teacher Training Session', 'Mandatory teacher training session on the new SRMS features will be held next week. All teaching staff must attend.', 'teachers', 'high', '2025-01-31');
+('Welcome to S.M.A.R.T', 'Welcome to the Student Management And Record Tracking system. This comprehensive platform helps manage student records, attendance, grades, and communications efficiently.', 'all', 'high', '2027-12-31'),
+('System Features Overview', 'Key features include: Student Management, Attendance Tracking, Grade Management, Announcements, NFC Attendance, and Comprehensive Reporting. Please explore all modules.', 'all', 'normal', '2027-12-31'),
+('Academic Calendar 2023-2024', 'First Semester: June - October | Second Semester: November - March. Please mark your calendars for important dates and events.', 'all', 'high', '2027-03-31'),
+('New Student Registration', 'New student registration for the upcoming academic year is now open. Please submit all required documents before the deadline.', 'parents', 'normal', '2027-05-31'),
+('Teacher Training Session', 'Mandatory teacher training session on the new system features will be held next week. All teaching staff must attend.', 'teachers', 'high', '2027-01-31');
 
--- Migration script for existing databases: add nfc_tag_id column
--- Run this if you already have the database without NFC support:
--- ALTER TABLE students ADD COLUMN nfc_tag_id VARCHAR(100) DEFAULT NULL;
--- ALTER TABLE students ADD UNIQUE KEY unique_nfc_tag (nfc_tag_id);
+-- Migration script for existing databases: add archive columns
+-- Run these if you already have the database without archive support:
+-- ALTER TABLE students ADD COLUMN is_archived TINYINT(1) DEFAULT 0;
+-- ALTER TABLE students ADD COLUMN archived_at TIMESTAMP NULL DEFAULT NULL;
+-- ALTER TABLE attendance ADD COLUMN is_archived TINYINT(1) DEFAULT 0;
+-- ALTER TABLE attendance ADD COLUMN archived_at TIMESTAMP NULL DEFAULT NULL;
+-- ALTER TABLE grades ADD COLUMN is_archived TINYINT(1) DEFAULT 0;
+-- ALTER TABLE grades ADD COLUMN archived_at TIMESTAMP NULL DEFAULT NULL;
+-- ALTER TABLE announcements ADD COLUMN is_archived TINYINT(1) DEFAULT 0;
+-- ALTER TABLE announcements ADD COLUMN archived_at TIMESTAMP NULL DEFAULT NULL;

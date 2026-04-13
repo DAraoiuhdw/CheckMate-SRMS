@@ -1,5 +1,5 @@
-// CheckMate! Student Record Management System (SRMS)
-// Enhanced with NFC Attendance, Full CRUD, & Railway-Ready Deployment
+// S.M.A.R.T — Student Management And Record Tracking
+// Enhanced with NFC Attendance, Role-Based Access, Archive System & Railway-Ready Deployment
 
 const express = require('express');
 const session = require('express-session');
@@ -35,17 +35,16 @@ if (process.env.DATABASE_URL) {
         connectTimeout: 30000,
         ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
     });
-    console.log('📦 Using DATABASE_URL for connection');
+    console.log('[DB] Using DATABASE_URL for connection');
 } else if (process.env.MYSQLHOST) {
-    // Railway individual env vars
     pool = mysql.createPool({
         ...dbConfig,
         ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
     });
-    console.log(`📦 Using Railway env vars: ${dbConfig.host}:${dbConfig.port}`);
+    console.log(`[DB] Using Railway env vars: ${dbConfig.host}:${dbConfig.port}`);
 } else {
     pool = mysql.createPool(dbConfig);
-    console.log(`📦 Using local config: ${dbConfig.host}:${dbConfig.port}`);
+    console.log(`[DB] Using local config: ${dbConfig.host}:${dbConfig.port}`);
 }
 
 // Track database readiness
@@ -54,18 +53,18 @@ let dbReady = false;
 // Auto-initialize database schema
 async function initializeDatabase(connection) {
     try {
-        // Check if tables already exist
         const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
         if (tables.length > 0) {
-            console.log('✅ Database tables already exist');
+            console.log('[DB] Tables already exist');
+            // Run migrations for archive columns
+            await runMigrations(connection);
             return;
         }
 
-        console.log('🔧 Initializing database schema...');
+        console.log('[DB] Initializing database schema...');
         const schemaPath = path.join(__dirname, 'database.sql');
         if (fs.existsSync(schemaPath)) {
             const schema = fs.readFileSync(schemaPath, 'utf8');
-            // Split by semicolons and execute each statement (skip empty)
             const statements = schema
                 .split(';')
                 .map(s => s.trim())
@@ -75,19 +74,50 @@ async function initializeDatabase(connection) {
                 try {
                     await connection.query(statement);
                 } catch (err) {
-                    // Ignore "already exists" and "duplicate" errors
                     if (!err.message.includes('already exists') && !err.message.includes('Duplicate')) {
-                        console.warn('⚠️  Schema statement warning:', err.message.substring(0, 100));
+                        console.warn('[DB] Schema warning:', err.message.substring(0, 100));
                     }
                 }
             }
-            console.log('✅ Database schema initialized successfully');
-        } else {
-            console.log('⚠️  database.sql not found, skipping auto-init');
+            console.log('[DB] Schema initialized successfully');
         }
     } catch (error) {
-        console.error('⚠️  Database initialization error:', error.message);
+        console.error('[DB] Initialization error:', error.message);
     }
+}
+
+// Run migrations for existing databases
+async function runMigrations(connection) {
+    const migrations = [
+        "ALTER TABLE students ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
+        "ALTER TABLE students ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
+        "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
+        "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
+        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
+        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
+        // Add student demo account if not exists
+        "INSERT IGNORE INTO users (name, email, password, role) VALUES ('John Michael Smith', 'john.smith@email.com', 'student123', 'student')"
+    ];
+
+    for (const sql of migrations) {
+        try {
+            await connection.query(sql);
+        } catch (err) {
+            // Silently ignore if column already exists or syntax not supported
+            if (!err.message.includes('Duplicate') && !err.message.includes('already exists')) {
+                // Try fallback without IF NOT EXISTS (older MySQL)
+                if (err.message.includes('IF NOT EXISTS')) {
+                    try {
+                        const fallback = sql.replace(' IF NOT EXISTS', '');
+                        await connection.query(fallback);
+                    } catch (e) { /* column already exists */ }
+                }
+            }
+        }
+    }
+    console.log('[DB] Migrations complete');
 }
 
 // Test database connection with retry logic
@@ -95,22 +125,21 @@ async function testConnection(retries = 5, delay = 3000) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const connection = await pool.getConnection();
-            console.log('✅ Connected to CheckMate! SRMS Database');
+            console.log('[DB] Connected to S.M.A.R.T Database');
             await initializeDatabase(connection);
             connection.release();
             dbReady = true;
             return true;
         } catch (error) {
-            console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, error.message);
+            console.error(`[DB] Connection attempt ${attempt}/${retries} failed:`, error.message);
             if (attempt < retries) {
                 const waitTime = delay * attempt;
-                console.log(`⏳ Retrying in ${waitTime / 1000}s...`);
+                console.log(`[DB] Retrying in ${waitTime / 1000}s...`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));
             }
         }
     }
-    console.error('❌ All database connection attempts failed.');
-    console.log('💡 The server will start anyway. Database will be retried on first request.');
+    console.error('[DB] All connection attempts failed.');
     return false;
 }
 
@@ -121,7 +150,7 @@ const db = {
             const [rows] = await pool.execute(query, params);
             return rows;
         } catch (error) {
-            console.error('Database query error:', error.message);
+            console.error('[DB] Query error:', error.message);
             throw error;
         }
     },
@@ -131,7 +160,7 @@ const db = {
             const [rows] = await pool.execute(query, params);
             return rows[0] || null;
         } catch (error) {
-            console.error('Database query error:', error.message);
+            console.error('[DB] Query error:', error.message);
             throw error;
         }
     },
@@ -141,7 +170,7 @@ const db = {
             const [result] = await pool.execute(query, params);
             return result.insertId;
         } catch (error) {
-            console.error('Database insert error:', error.message);
+            console.error('[DB] Insert error:', error.message);
             throw error;
         }
     },
@@ -151,7 +180,7 @@ const db = {
             const [result] = await pool.execute(query, params);
             return result.affectedRows;
         } catch (error) {
-            console.error('Database update error:', error.message);
+            console.error('[DB] Update error:', error.message);
             throw error;
         }
     },
@@ -161,7 +190,7 @@ const db = {
             const [result] = await pool.execute(query, params);
             return result.affectedRows;
         } catch (error) {
-            console.error('Database delete error:', error.message);
+            console.error('[DB] Delete error:', error.message);
             throw error;
         }
     }
@@ -171,7 +200,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Trust proxy for Railway/production
 if (isProduction) {
     app.set('trust proxy', 1);
 }
@@ -180,40 +208,46 @@ if (isProduction) {
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session configuration
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'checkmate-srms-secure-session-key-2024',
+    secret: process.env.SESSION_SECRET || 'smart-srms-secure-session-key-2024',
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: isProduction,
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        sameSite: isProduction ? 'lax' : 'lax'
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
     }
 }));
 
-// Middleware to check authentication
+// ============================================
+// AUTH MIDDLEWARE
+// ============================================
 const isAuthenticated = (req, res, next) => {
     if (!req.session.user) {
-        return res.status(401).json({
-            success: false,
-            message: 'Authentication required'
-        });
+        return res.status(401).json({ success: false, message: 'Authentication required' });
     }
     next();
 };
 
-// Middleware to check admin role
 const isAdmin = (req, res, next) => {
     if (!req.session.user || req.session.user.role !== 'admin') {
-        return res.status(403).json({
-            success: false,
-            message: 'Admin access required'
-        });
+        return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+    next();
+};
+
+const isTeacherOrAdmin = (req, res, next) => {
+    if (!req.session.user || (req.session.user.role !== 'admin' && req.session.user.role !== 'teacher')) {
+        return res.status(403).json({ success: false, message: 'Teacher or Admin access required' });
+    }
+    next();
+};
+
+const isTeacher = (req, res, next) => {
+    if (!req.session.user || req.session.user.role !== 'teacher') {
+        return res.status(403).json({ success: false, message: 'Teacher access required' });
     }
     next();
 };
@@ -226,37 +260,34 @@ app.post('/api/auth/login', async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email and password are required'
-            });
+            return res.status(400).json({ success: false, message: 'Email and password are required' });
         }
 
         const user = await db.getOne('SELECT * FROM users WHERE email = ?', [email]);
 
         if (!user || password !== user.password) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid email or password'
-            });
+            return res.status(401).json({ success: false, message: 'Invalid email or password' });
+        }
+
+        // For student role, find linked student record
+        let studentId = null;
+        if (user.role === 'student') {
+            const student = await db.getOne('SELECT id FROM students WHERE email = ? AND is_archived = 0', [email]);
+            if (student) studentId = student.id;
         }
 
         req.session.user = {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: user.role
+            role: user.role,
+            studentId: studentId
         };
 
         res.json({
             success: true,
             message: 'Login successful',
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role
-            }
+            user: req.session.user
         });
 
     } catch (error) {
@@ -267,9 +298,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
     req.session.destroy((err) => {
-        if (err) {
-            return res.status(500).json({ success: false, message: 'Logout failed' });
-        }
+        if (err) return res.status(500).json({ success: false, message: 'Logout failed' });
         res.json({ success: true, message: 'Logged out successfully' });
     });
 });
@@ -278,19 +307,20 @@ app.get('/api/auth/status', (req, res) => {
     if (req.session.user) {
         res.json({ success: true, authenticated: true, user: req.session.user });
     } else {
-        res.json({ success: false, authenticated: false, message: 'Not authenticated' });
+        res.json({ success: false, authenticated: false });
     }
 });
 
 // ============================================
-// STUDENTS API
+// STUDENTS API (Admin/Teacher only for write)
 // ============================================
-app.get('/api/students', isAuthenticated, async (req, res) => {
+app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const query = `
             SELECT s.id, s.student_name, s.email, s.phone, s.address, s.date_of_birth, s.gender, s.enrollment_date, s.section_id, s.nfc_tag_id, sec.section_name 
             FROM students s 
             LEFT JOIN sections sec ON s.section_id = sec.id 
+            WHERE s.is_archived = 0
             ORDER BY s.student_name
         `;
         const students = await db.executeQuery(query);
@@ -301,7 +331,8 @@ app.get('/api/students', isAuthenticated, async (req, res) => {
     }
 });
 
-app.post('/api/students', isAuthenticated, async (req, res) => {
+// Teacher and admin can add students
+app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
 
@@ -323,7 +354,8 @@ app.post('/api/students', isAuthenticated, async (req, res) => {
     }
 });
 
-app.put('/api/students/:id', isAuthenticated, async (req, res) => {
+// Teacher and admin can edit students
+app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
@@ -332,7 +364,7 @@ app.put('/api/students/:id', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Student name is required' });
         }
 
-        const query = 'UPDATE students SET student_name = ?, section_id = ?, email = ?, phone = ?, address = ?, date_of_birth = ?, gender = ? WHERE id = ?';
+        const query = 'UPDATE students SET student_name = ?, section_id = ?, email = ?, phone = ?, address = ?, date_of_birth = ?, gender = ? WHERE id = ? AND is_archived = 0';
         const affectedRows = await db.update(query, [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null, id]);
 
         if (affectedRows === 0) {
@@ -346,30 +378,31 @@ app.put('/api/students/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+// Admin only can archive (soft-delete) students
 app.delete('/api/students/:id', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const affectedRows = await db.deleteRecord('DELETE FROM students WHERE id = ?', [id]);
+        const affectedRows = await db.update('UPDATE students SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
 
         if (affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Student not found' });
         }
 
-        res.json({ success: true, message: 'Student deleted successfully' });
+        res.json({ success: true, message: 'Student archived successfully' });
     } catch (error) {
-        console.error('Delete student error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete student' });
+        console.error('Archive student error:', error);
+        res.status(500).json({ success: false, message: 'Failed to archive student' });
     }
 });
 
-app.get('/api/students/search/:query', isAuthenticated, async (req, res) => {
+app.get('/api/students/search/:query', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { query } = req.params;
         const searchQuery = `
             SELECT s.id, s.student_name, s.email, s.phone, s.gender, s.section_id, s.nfc_tag_id, sec.section_name 
             FROM students s 
             LEFT JOIN sections sec ON s.section_id = sec.id 
-            WHERE s.student_name LIKE ? OR s.email LIKE ? 
+            WHERE s.is_archived = 0 AND (s.student_name LIKE ? OR s.email LIKE ?)
             ORDER BY s.student_name
         `;
         const searchPattern = `%${query}%`;
@@ -381,8 +414,8 @@ app.get('/api/students/search/:query', isAuthenticated, async (req, res) => {
     }
 });
 
-// NFC Tag Assignment
-app.post('/api/students/:id/nfc', isAuthenticated, async (req, res) => {
+// NFC Tag Assignment (teacher/admin)
+app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { nfc_tag_id } = req.body;
@@ -391,13 +424,12 @@ app.post('/api/students/:id/nfc', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'NFC tag ID is required' });
         }
 
-        // Check if tag already assigned to another student
-        const existing = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ? AND id != ?', [nfc_tag_id, id]);
+        const existing = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ? AND id != ? AND is_archived = 0', [nfc_tag_id, id]);
         if (existing) {
             return res.status(400).json({ success: false, message: `This tag is already assigned to ${existing.student_name}` });
         }
 
-        const affectedRows = await db.update('UPDATE students SET nfc_tag_id = ? WHERE id = ?', [nfc_tag_id, id]);
+        const affectedRows = await db.update('UPDATE students SET nfc_tag_id = ? WHERE id = ? AND is_archived = 0', [nfc_tag_id, id]);
 
         if (affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Student not found' });
@@ -418,7 +450,7 @@ app.get('/api/students/nfc/:tagId', isAuthenticated, async (req, res) => {
             SELECT s.id, s.student_name, s.email, s.section_id, s.nfc_tag_id, sec.section_name 
             FROM students s 
             LEFT JOIN sections sec ON s.section_id = sec.id 
-            WHERE s.nfc_tag_id = ?
+            WHERE s.nfc_tag_id = ? AND s.is_archived = 0
         `, [tagId]);
 
         if (student) {
@@ -433,9 +465,9 @@ app.get('/api/students/nfc/:tagId', isAuthenticated, async (req, res) => {
 });
 
 // ============================================
-// ATTENDANCE API
+// ATTENDANCE API (Teacher/Admin only)
 // ============================================
-app.get('/api/attendance', isAuthenticated, async (req, res) => {
+app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { date, student_id, section_id } = req.query;
         let query = `
@@ -444,24 +476,13 @@ app.get('/api/attendance', isAuthenticated, async (req, res) => {
             FROM attendance a
             JOIN students s ON a.student_id = s.id
             LEFT JOIN sections sec ON s.section_id = sec.id
-            WHERE 1=1
+            WHERE a.is_archived = 0
         `;
         const params = [];
 
-        if (date) {
-            query += ' AND a.date = ?';
-            params.push(date);
-        }
-
-        if (student_id) {
-            query += ' AND a.student_id = ?';
-            params.push(student_id);
-        }
-
-        if (section_id) {
-            query += ' AND s.section_id = ?';
-            params.push(section_id);
-        }
+        if (date) { query += ' AND a.date = ?'; params.push(date); }
+        if (student_id) { query += ' AND a.student_id = ?'; params.push(student_id); }
+        if (section_id) { query += ' AND s.section_id = ?'; params.push(section_id); }
 
         query += ' ORDER BY a.date DESC, s.student_name';
 
@@ -473,7 +494,7 @@ app.get('/api/attendance', isAuthenticated, async (req, res) => {
     }
 });
 
-app.post('/api/attendance', isAuthenticated, async (req, res) => {
+app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { attendanceRecords } = req.body;
 
@@ -486,21 +507,20 @@ app.post('/api/attendance', isAuthenticated, async (req, res) => {
 
         for (const record of attendanceRecords) {
             const { student_id, status, remarks } = record;
-
             if (!student_id || !status) {
                 results.push({ student_id, success: false, message: 'Student ID and status are required' });
                 continue;
             }
 
             try {
-                const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ?', [student_id, today]);
+                const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND is_archived = 0', [student_id, today]);
 
                 if (existing) {
-                    await db.update('UPDATE attendance SET status = ?, remarks = ? WHERE student_id = ? AND date = ?', [status, remarks || null, student_id, today]);
-                    results.push({ student_id, success: true, message: 'Attendance updated successfully' });
+                    await db.update('UPDATE attendance SET status = ?, remarks = ? WHERE student_id = ? AND date = ? AND is_archived = 0', [status, remarks || null, student_id, today]);
+                    results.push({ student_id, success: true, message: 'Attendance updated' });
                 } else {
                     await db.insert('INSERT INTO attendance (student_id, date, status, remarks) VALUES (?, ?, ?, ?)', [student_id, today, status, remarks || null]);
-                    results.push({ student_id, success: true, message: 'Attendance recorded successfully' });
+                    results.push({ student_id, success: true, message: 'Attendance recorded' });
                 }
             } catch (error) {
                 results.push({ student_id, success: false, message: 'Failed to record attendance' });
@@ -514,8 +534,8 @@ app.post('/api/attendance', isAuthenticated, async (req, res) => {
     }
 });
 
-// NFC Attendance
-app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
+// NFC Attendance (teacher/admin)
+app.post('/api/attendance/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { nfc_tag_id } = req.body;
 
@@ -523,17 +543,17 @@ app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'NFC tag ID is required' });
         }
 
-        const student = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ?', [nfc_tag_id]);
+        const student = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ? AND is_archived = 0', [nfc_tag_id]);
 
         if (!student) {
             return res.status(404).json({ success: false, message: 'No student found with this NFC tag' });
         }
 
         const today = new Date().toISOString().split('T')[0];
-        const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ?', [student.id, today]);
+        const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND is_archived = 0', [student.id, today]);
 
         if (existing) {
-            await db.update('UPDATE attendance SET status = ? WHERE student_id = ? AND date = ?', ['Present', student.id, today]);
+            await db.update('UPDATE attendance SET status = ? WHERE student_id = ? AND date = ? AND is_archived = 0', ['Present', student.id, today]);
         } else {
             await db.insert('INSERT INTO attendance (student_id, date, status, remarks) VALUES (?, ?, ?, ?)', [student.id, today, 'Present', 'NFC Check-in']);
         }
@@ -549,19 +569,20 @@ app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
     }
 });
 
-app.delete('/api/attendance/:id', isAuthenticated, async (req, res) => {
+// Archive attendance (teacher/admin)
+app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const affectedRows = await db.deleteRecord('DELETE FROM attendance WHERE id = ?', [id]);
+        const affectedRows = await db.update('UPDATE attendance SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
 
         if (affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Attendance record not found' });
         }
 
-        res.json({ success: true, message: 'Attendance record deleted successfully' });
+        res.json({ success: true, message: 'Attendance record archived' });
     } catch (error) {
-        console.error('Delete attendance error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete attendance record' });
+        console.error('Archive attendance error:', error);
+        res.status(500).json({ success: false, message: 'Failed to archive attendance record' });
     }
 });
 
@@ -571,28 +592,20 @@ app.get('/api/attendance/stats', isAuthenticated, async (req, res) => {
         let dateCondition = '';
 
         switch (period) {
-            case 'week':
-                dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
-                break;
-            case 'month':
-                dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)';
-                break;
-            case 'year':
-                dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)';
-                break;
+            case 'week': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'; break;
+            case 'month': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)'; break;
+            case 'year': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)'; break;
         }
 
-        const statsQuery = `
+        const stats = await db.getOne(`
             SELECT 
                 COUNT(*) as total_records,
                 SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent,
                 SUM(CASE WHEN a.status = 'Excused' THEN 1 ELSE 0 END) as excused
             FROM attendance a
-            WHERE 1=1 ${dateCondition}
-        `;
-
-        const stats = await db.getOne(statsQuery);
+            WHERE a.is_archived = 0 ${dateCondition}
+        `);
         res.json({ success: true, data: stats });
     } catch (error) {
         console.error('Get attendance stats error:', error);
@@ -601,35 +614,36 @@ app.get('/api/attendance/stats', isAuthenticated, async (req, res) => {
 });
 
 // ============================================
-// GRADES API
+// GRADES API — Teacher can add/delete, Admin can only view, Student sees own
 // ============================================
 app.get('/api/grades', isAuthenticated, async (req, res) => {
     try {
         const { student_id, subject, semester } = req.query;
+        const user = req.session.user;
+
         let query = `
             SELECT g.id, g.student_id, g.subject, g.grade, g.score, g.max_score, g.semester, g.academic_year, g.created_at,
                    s.student_name, s.section_id, sec.section_name
             FROM grades g
             JOIN students s ON g.student_id = s.id
             LEFT JOIN sections sec ON s.section_id = sec.id
-            WHERE 1=1
+            WHERE g.is_archived = 0
         `;
         const params = [];
 
-        if (student_id) {
-            query += ' AND g.student_id = ?';
-            params.push(student_id);
+        // Student role: only see own grades
+        if (user.role === 'student') {
+            if (user.studentId) {
+                query += ' AND g.student_id = ?';
+                params.push(user.studentId);
+            } else {
+                return res.json({ success: true, data: [] });
+            }
         }
 
-        if (subject) {
-            query += ' AND g.subject = ?';
-            params.push(subject);
-        }
-
-        if (semester) {
-            query += ' AND g.semester = ?';
-            params.push(semester);
-        }
+        if (student_id) { query += ' AND g.student_id = ?'; params.push(student_id); }
+        if (subject) { query += ' AND g.subject = ?'; params.push(subject); }
+        if (semester) { query += ' AND g.semester = ?'; params.push(semester); }
 
         query += ' ORDER BY g.academic_year DESC, g.semester DESC, s.student_name';
 
@@ -641,7 +655,8 @@ app.get('/api/grades', isAuthenticated, async (req, res) => {
     }
 });
 
-app.post('/api/grades', isAuthenticated, async (req, res) => {
+// Only teachers can add grades
+app.post('/api/grades', isAuthenticated, isTeacher, async (req, res) => {
     try {
         const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
 
@@ -663,24 +678,25 @@ app.post('/api/grades', isAuthenticated, async (req, res) => {
     }
 });
 
-app.delete('/api/grades/:id', isAuthenticated, async (req, res) => {
+// Only teachers can archive grades
+app.delete('/api/grades/:id', isAuthenticated, isTeacher, async (req, res) => {
     try {
         const { id } = req.params;
-        const affectedRows = await db.deleteRecord('DELETE FROM grades WHERE id = ?', [id]);
+        const affectedRows = await db.update('UPDATE grades SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
 
         if (affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Grade record not found' });
         }
 
-        res.json({ success: true, message: 'Grade deleted successfully' });
+        res.json({ success: true, message: 'Grade archived' });
     } catch (error) {
-        console.error('Delete grade error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete grade' });
+        console.error('Archive grade error:', error);
+        res.status(500).json({ success: false, message: 'Failed to archive grade' });
     }
 });
 
 // ============================================
-// ANNOUNCEMENTS API
+// ANNOUNCEMENTS API — Admin/Teacher can write, Student can read
 // ============================================
 app.get('/api/announcements', isAuthenticated, async (req, res) => {
     try {
@@ -688,7 +704,7 @@ app.get('/api/announcements', isAuthenticated, async (req, res) => {
         let query = `
             SELECT id, title, content, target_audience, priority, expires_at, created_at, updated_at
             FROM announcements
-            WHERE (expires_at IS NULL OR expires_at >= CURDATE())
+            WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())
         `;
         const params = [];
 
@@ -714,14 +730,13 @@ app.get('/api/announcements/latest', isAuthenticated, async (req, res) => {
         const query = `
             SELECT id, title, content, target_audience, priority, expires_at, created_at, updated_at
             FROM announcements
-            WHERE (expires_at IS NULL OR expires_at >= CURDATE())
+            WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())
             ORDER BY priority DESC, created_at DESC
             LIMIT ?
         `;
         const announcements = await db.executeQuery(query, [parseInt(limit)]);
         res.json({ success: true, data: announcements });
     } catch (error) {
-        console.error('Get latest announcements error:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch latest announcements' });
     }
 });
@@ -729,7 +744,7 @@ app.get('/api/announcements/latest', isAuthenticated, async (req, res) => {
 app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
     try {
         const { id } = req.params;
-        const announcement = await db.getOne('SELECT * FROM announcements WHERE id = ?', [id]);
+        const announcement = await db.getOne('SELECT * FROM announcements WHERE id = ? AND is_archived = 0', [id]);
 
         if (!announcement) {
             return res.status(404).json({ success: false, message: 'Announcement not found' });
@@ -737,12 +752,12 @@ app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
 
         res.json({ success: true, data: announcement });
     } catch (error) {
-        console.error('Get announcement error:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch announcement' });
     }
 });
 
-app.post('/api/announcements', isAuthenticated, async (req, res) => {
+// Teacher/Admin can create announcements
+app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { title, content, target_audience, priority, expires_at } = req.body;
 
@@ -759,18 +774,14 @@ app.post('/api/announcements', isAuthenticated, async (req, res) => {
 
         const createdAnnouncement = await db.getOne('SELECT * FROM announcements WHERE id = ?', [announcementId]);
 
-        res.json({
-            success: true,
-            message: 'Announcement created successfully',
-            data: createdAnnouncement
-        });
+        res.json({ success: true, message: 'Announcement created successfully', data: createdAnnouncement });
     } catch (error) {
-        console.error('Create announcement error:', error);
         res.status(500).json({ success: false, message: 'Failed to create announcement' });
     }
 });
 
-app.put('/api/announcements/:id', isAuthenticated, async (req, res) => {
+// Teacher/Admin can update announcements
+app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { title, content, target_audience, priority, expires_at } = req.body;
@@ -779,7 +790,7 @@ app.put('/api/announcements/:id', isAuthenticated, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Title and content are required' });
         }
 
-        const query = 'UPDATE announcements SET title = ?, content = ?, target_audience = ?, priority = ?, expires_at = ? WHERE id = ?';
+        const query = 'UPDATE announcements SET title = ?, content = ?, target_audience = ?, priority = ?, expires_at = ? WHERE id = ? AND is_archived = 0';
         const affectedRows = await db.update(query, [title, content, target_audience || 'all', priority || 'normal', expires_at || null, id]);
 
         if (affectedRows === 0) {
@@ -788,24 +799,104 @@ app.put('/api/announcements/:id', isAuthenticated, async (req, res) => {
 
         res.json({ success: true, message: 'Announcement updated successfully' });
     } catch (error) {
-        console.error('Update announcement error:', error);
         res.status(500).json({ success: false, message: 'Failed to update announcement' });
     }
 });
 
-app.delete('/api/announcements/:id', isAuthenticated, async (req, res) => {
+// Admin only can archive announcements
+app.delete('/api/announcements/:id', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const affectedRows = await db.deleteRecord('DELETE FROM announcements WHERE id = ?', [id]);
+        const affectedRows = await db.update('UPDATE announcements SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
 
         if (affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Announcement not found' });
         }
 
-        res.json({ success: true, message: 'Announcement deleted successfully' });
+        res.json({ success: true, message: 'Announcement archived' });
     } catch (error) {
-        console.error('Delete announcement error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete announcement' });
+        res.status(500).json({ success: false, message: 'Failed to archive announcement' });
+    }
+});
+
+// ============================================
+// ARCHIVE API (Admin only — view, restore, permanent delete)
+// ============================================
+app.get('/api/archive/:type', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { type } = req.params;
+        let query = '';
+
+        switch (type) {
+            case 'students':
+                query = `SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = 1 ORDER BY s.archived_at DESC`;
+                break;
+            case 'attendance':
+                query = `SELECT a.*, s.student_name, sec.section_name FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE a.is_archived = 1 ORDER BY a.archived_at DESC`;
+                break;
+            case 'grades':
+                query = `SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = 1 ORDER BY g.archived_at DESC`;
+                break;
+            case 'announcements':
+                query = `SELECT * FROM announcements WHERE is_archived = 1 ORDER BY archived_at DESC`;
+                break;
+            default:
+                return res.status(400).json({ success: false, message: 'Invalid archive type' });
+        }
+
+        const records = await db.executeQuery(query);
+        res.json({ success: true, data: records });
+    } catch (error) {
+        console.error('Get archive error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch archived records' });
+    }
+});
+
+// Restore from archive
+app.post('/api/archive/:type/:id/restore', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { type, id } = req.params;
+        const tableMap = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
+        const table = tableMap[type];
+
+        if (!table) {
+            return res.status(400).json({ success: false, message: 'Invalid archive type' });
+        }
+
+        const affectedRows = await db.update(`UPDATE ${table} SET is_archived = 0, archived_at = NULL WHERE id = ? AND is_archived = 1`, [id]);
+
+        if (affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Archived record not found' });
+        }
+
+        res.json({ success: true, message: 'Record restored successfully' });
+    } catch (error) {
+        console.error('Restore archive error:', error);
+        res.status(500).json({ success: false, message: 'Failed to restore record' });
+    }
+});
+
+// Permanent delete from archive
+app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const { type, id } = req.params;
+        const tableMap = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
+        const table = tableMap[type];
+
+        if (!table) {
+            return res.status(400).json({ success: false, message: 'Invalid archive type' });
+        }
+
+        const affectedRows = await db.deleteRecord(`DELETE FROM ${table} WHERE id = ? AND is_archived = 1`, [id]);
+
+        if (affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Archived record not found' });
+        }
+
+        res.json({ success: true, message: 'Record permanently deleted' });
+    } catch (error) {
+        console.error('Permanent delete error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete record' });
     }
 });
 
@@ -817,7 +908,6 @@ app.get('/api/sections', isAuthenticated, async (req, res) => {
         const sections = await db.executeQuery('SELECT id, section_name FROM sections ORDER BY section_name');
         res.json({ success: true, data: sections });
     } catch (error) {
-        console.error('Get sections error:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch sections' });
     }
 });
@@ -827,11 +917,32 @@ app.get('/api/sections', isAuthenticated, async (req, res) => {
 // ============================================
 app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
     try {
+        const user = req.session.user;
+
+        // Student gets limited stats
+        if (user.role === 'student') {
+            const gradeCount = user.studentId
+                ? await db.getOne('SELECT COUNT(*) as count FROM grades WHERE student_id = ? AND is_archived = 0', [user.studentId])
+                : { count: 0 };
+            const announcementCount = await db.getOne('SELECT COUNT(*) as count FROM announcements WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())');
+
+            return res.json({
+                success: true,
+                data: {
+                    totalStudents: 0,
+                    todayAttendance: 0,
+                    totalGrades: gradeCount.count,
+                    activeAnnouncements: announcementCount.count,
+                    attendanceStats: { total: 0, present: 0, absent: 0, excused: 0 }
+                }
+            });
+        }
+
         const [studentCount, attendanceCount, gradeCount, announcementCount] = await Promise.all([
-            db.getOne('SELECT COUNT(*) as count FROM students'),
-            db.getOne('SELECT COUNT(*) as count FROM attendance WHERE date = CURDATE()'),
-            db.getOne('SELECT COUNT(*) as count FROM grades'),
-            db.getOne('SELECT COUNT(*) as count FROM announcements WHERE (expires_at IS NULL OR expires_at >= CURDATE())')
+            db.getOne('SELECT COUNT(*) as count FROM students WHERE is_archived = 0'),
+            db.getOne('SELECT COUNT(*) as count FROM attendance WHERE date = CURDATE() AND is_archived = 0'),
+            db.getOne('SELECT COUNT(*) as count FROM grades WHERE is_archived = 0'),
+            db.getOne('SELECT COUNT(*) as count FROM announcements WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())')
         ]);
 
         const attendanceStats = await db.getOne(`
@@ -841,7 +952,7 @@ app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
                 SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
                 SUM(CASE WHEN status = 'Excused' THEN 1 ELSE 0 END) as excused
             FROM attendance 
-            WHERE date = CURDATE()
+            WHERE date = CURDATE() AND is_archived = 0
         `);
 
         res.json({
@@ -868,19 +979,20 @@ app.get('/login.html', (req, res) => {
 });
 
 app.get(['/dashboard.html', '/'], (req, res) => {
-    if (!req.session.user) {
-        return res.redirect('/login.html');
-    }
+    if (!req.session.user) return res.redirect('/login.html');
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 app.get('/students.html', (req, res) => {
     if (!req.session.user) return res.redirect('/login.html');
+    // Students role redirected to dashboard
+    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
     res.sendFile(path.join(__dirname, 'public', 'students.html'));
 });
 
 app.get('/attendance.html', (req, res) => {
     if (!req.session.user) return res.redirect('/login.html');
+    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
     res.sendFile(path.join(__dirname, 'public', 'attendance.html'));
 });
 
@@ -896,67 +1008,58 @@ app.get('/announcements.html', (req, res) => {
 
 app.get('/nfc-attendance.html', (req, res) => {
     if (!req.session.user) return res.redirect('/login.html');
+    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
     res.sendFile(path.join(__dirname, 'public', 'nfc-attendance.html'));
 });
 
-// Error handling middleware
+app.get('/archive.html', (req, res) => {
+    if (!req.session.user) return res.redirect('/login.html');
+    if (req.session.user.role !== 'admin') return res.redirect('/dashboard.html');
+    res.sendFile(path.join(__dirname, 'public', 'archive.html'));
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ success: true, status: 'running', database: dbReady ? 'connected' : 'connecting', timestamp: new Date().toISOString() });
+});
+
+// Error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-// 404 handler
 app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Health check endpoint (Railway uses this)
-app.get('/api/health', (req, res) => {
-    res.json({
-        success: true,
-        status: 'running',
-        database: dbReady ? 'connected' : 'connecting',
-        timestamp: new Date().toISOString()
-    });
-});
-
 // Start server
 async function startServer() {
-    // Start HTTP server FIRST (Railway needs the port bound quickly)
     const server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`🚀 CheckMate! SRMS Server running on port ${PORT}`);
-        console.log(`📱 Login page: http://localhost:${PORT}/login.html`);
-        console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
-        console.log(`📱 NFC Attendance: http://localhost:${PORT}/nfc-attendance.html`);
-        if (isProduction) {
-            console.log('🌐 Running in PRODUCTION mode');
-        }
+        console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
+        console.log(`[S.M.A.R.T] Login: http://localhost:${PORT}/login.html`);
+        if (isProduction) console.log('[S.M.A.R.T] Running in PRODUCTION mode');
     });
 
-    // Then attempt database connection (with retries)
     const dbConnected = await testConnection();
     if (!dbConnected) {
-        console.log('⚠️  Server is running but database is not connected yet.');
-        console.log('💡 Database will be retried automatically on incoming requests.');
-
-        // Background retry every 15 seconds
+        console.log('[S.M.A.R.T] Server running, database reconnecting in background...');
         const retryInterval = setInterval(async () => {
             try {
                 const connection = await pool.getConnection();
-                console.log('✅ Database reconnected successfully!');
+                console.log('[DB] Reconnected!');
                 await initializeDatabase(connection);
                 connection.release();
                 dbReady = true;
                 clearInterval(retryInterval);
             } catch (err) {
-                console.log('⏳ Still waiting for database...', err.message);
+                console.log('[DB] Still waiting...', err.message);
             }
         }, 15000);
     }
 
-    // Graceful shutdown
     const shutdown = async () => {
-        console.log('\n🔄 Shutting down CheckMate! SRMS gracefully...');
+        console.log('\n[S.M.A.R.T] Shutting down...');
         server.close();
         await pool.end();
         process.exit(0);
@@ -967,4 +1070,3 @@ async function startServer() {
 }
 
 startServer();
-
