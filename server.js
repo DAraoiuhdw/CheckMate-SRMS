@@ -28,12 +28,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ============================================
 // DATABASE — PostgreSQL (Supabase Session Pooler)
 // ============================================
-// Use Session Pooler (port 6543) for IPv4 compatibility on Railway
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.jaiwhmrxyhayjeintvws:Denielmar12%23@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres';
+// IMPORTANT: Set DATABASE_URL env var on Railway with your Supabase Session Pooler URL
+// Format: postgresql://postgres.[PROJECT_REF]:[PASSWORD]@[POOLER_HOST]:6543/postgres
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+    console.error('[DB] ERROR: DATABASE_URL environment variable is not set!');
+    console.error('[DB] Go to Supabase Dashboard > Settings > Database > Connection string > Session Pooler');
+    console.error('[DB] Copy the connection string and set it as DATABASE_URL on Railway');
+}
 
 const pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    connectionString: DATABASE_URL || 'postgresql://localhost:5432/smart_srms',
+    ssl: DATABASE_URL ? { rejectUnauthorized: false } : false,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000
@@ -462,9 +468,8 @@ app.get('/api/grades', isAuthenticated, async (req, res) => {
             params = [studentResult.rows[0].id];
         } else {
             sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
-            const idx = 1;
-            if (req.query.student_id) { sql += ` AND g.student_id = $${idx}`; params.push(req.query.student_id); }
-            if (req.query.semester) { sql += ` AND g.semester = $${params.length + 1}`; params.push(req.query.semester); }
+            if (req.query.student_id) { params.push(req.query.student_id); sql += ` AND g.student_id = $${params.length}`; }
+            if (req.query.semester) { params.push(req.query.semester); sql += ` AND g.semester = $${params.length}`; }
             sql += " ORDER BY g.created_at DESC";
         }
         const result = await query(sql, params);
