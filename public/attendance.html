@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Track and manage student attendance in S.M.A.R.T.">
+    <meta name="description" content="Track and manage student attendance with a timeline view in S.M.A.R.T.">
     <title>Attendance - S.M.A.R.T</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,30 +14,18 @@
     <button class="mobile-menu-btn"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
     <div class="dashboard-container">
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    <div class="sidebar-logo-icon">SM</div>
-                    <div class="sidebar-logo-text">S.M.A.R.T</div>
-                </div>
-            </div>
-            <nav>
-                <ul class="sidebar-nav">
-                    <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
-                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
-                    <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
-                    <li class="sidebar-nav-item" data-role="admin"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
-                </ul>
-            </nav>
+            <div class="sidebar-header"><div class="sidebar-logo"><div class="sidebar-logo-icon">SM</div><div class="sidebar-logo-text">S.M.A.R.T</div></div></div>
+            <nav><ul class="sidebar-nav">
+                <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
+                <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
+                <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
+                <li class="sidebar-nav-item" data-role="admin"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
+            </ul></nav>
             <div class="sidebar-footer">
-                <div class="sidebar-user-card">
-                    <div class="sidebar-user-status"><div class="status-dot"></div><span style="font-size:12px;color:var(--text-secondary);">Online</span></div>
-                    <div class="sidebar-user-name user-name">User</div>
-                    <div class="sidebar-user-email user-email">user@example.com</div>
-                    <div class="sidebar-user-role user-role">Role</div>
-                </div>
+                <div class="sidebar-user-card"><div class="sidebar-user-status"><div class="status-dot"></div><span style="font-size:12px;color:var(--text-secondary);">Online</span></div><div class="sidebar-user-name user-name">User</div><div class="sidebar-user-email user-email">user@example.com</div><div class="sidebar-user-role user-role">Role</div></div>
                 <button class="dark-mode-toggle" style="position:static;margin-bottom:8px;width:100%;"><span class="toggle-icon"></span></button>
                 <button id="logoutBtn" class="btn btn-secondary" style="width:100%;">Logout</button>
             </div>
@@ -47,85 +35,86 @@
             <header class="header">
                 <div>
                     <h1 class="header-title">Attendance</h1>
-                    <p class="header-subtitle">Track and manage student attendance records</p>
+                    <p class="header-subtitle" id="live-clock">Loading date...</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-info" onclick="exportAttendance()">Export CSV</button>
+                    <button class="btn btn-info" onclick="exportAttendanceForDate()">Export CSV</button>
                 </div>
             </header>
             
-            <div class="stats-grid">
-                <div class="stat-card fade-in">
-                    <div class="stat-icon" style="background:var(--badge-success-bg);color:var(--success);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
-                    <div class="stat-value" id="present-count">0</div>
-                    <div class="stat-label">Present</div>
+            <!-- Timeline Calendar -->
+            <div class="card">
+                <div class="timeline-header">
+                    <div class="live-date">
+                        <span class="live-dot"></span>
+                        <span id="timeline-date-display">Today</span>
+                    </div>
                 </div>
-                <div class="stat-card fade-in">
-                    <div class="stat-icon" style="background:var(--badge-danger-bg);color:var(--danger);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
-                    <div class="stat-value" id="absent-count">0</div>
-                    <div class="stat-label">Absent</div>
-                </div>
-                <div class="stat-card fade-in">
-                    <div class="stat-icon" style="background:var(--badge-warning-bg);color:var(--warning);"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-                    <div class="stat-value" id="excused-count">0</div>
-                    <div class="stat-label">Excused</div>
-                </div>
-                <div class="stat-card fade-in">
-                    <div class="stat-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-                    <div class="stat-value" id="total-count">0</div>
-                    <div class="stat-label">Total Records</div>
+                <div id="timeline-calendar" class="timeline-grid"></div>
+                <div class="timeline-summary">
+                    <div class="timeline-stat present"><div class="ts-value" id="timeline-present">0</div><div class="ts-label">Present</div></div>
+                    <div class="timeline-stat absent"><div class="ts-value" id="timeline-absent">0</div><div class="ts-label">Absent</div></div>
+                    <div class="timeline-stat excused"><div class="ts-value" id="timeline-excused">0</div><div class="ts-label">Excused</div></div>
                 </div>
             </div>
             
             <!-- Tabs -->
             <div class="tabs">
-                <button class="tab active" data-tab="mark-tab">Mark Attendance</button>
-                <button class="tab" data-tab="records-tab">Records</button>
+                <button class="tab active" data-tab="records-tab">Records</button>
+                <button class="tab" data-tab="mark-tab">Mark Attendance</button>
+                <button class="tab" data-tab="qr-tab">QR Code</button>
+            </div>
+            
+            <!-- Records Tab -->
+            <div id="records-tab" class="tab-content active">
+                <div class="table-container">
+                    <table class="table">
+                        <thead><tr><th>Student</th><th>Section</th><th>Status</th><th>Remarks</th><th>Recorded</th></tr></thead>
+                        <tbody id="attendance-tbody">
+                            <tr><td colspan="5" class="text-center"><div class="loading"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             
             <!-- Mark Attendance Tab -->
-            <div id="mark-tab" class="tab-content active">
+            <div id="mark-tab" class="tab-content">
                 <div class="card">
                     <div class="card-header">
                         <h2 class="card-title">Mark Today's Attendance</h2>
                         <button id="submit-attendance-btn" class="btn btn-success" onclick="submitAttendance()">Submit Attendance</button>
                     </div>
-                    <div id="attendance-students">
-                        <div class="text-center" style="padding:24px;"><div class="loading"></div><p style="margin-top:8px;color:var(--text-secondary);">Loading students...</p></div>
+                    <div id="attendance-students"><div class="text-center" style="padding:24px;"><div class="loading"></div></div></div>
+                </div>
+            </div>
+            
+            <!-- QR Code Tab -->
+            <div id="qr-tab" class="tab-content">
+                <div class="card">
+                    <div class="qr-section">
+                        <h2 class="card-title" style="margin-bottom:8px;">QR Code Attendance</h2>
+                        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px;">Generate a one-time QR code for students to scan and mark themselves as present.</p>
+                        <button class="btn btn-success btn-lg" onclick="generateQRCode()">Generate QR Code</button>
+                        <div id="qr-display" style="display:none;"></div>
+                        <div id="qr-timer" class="qr-timer" style="margin-top:12px;"></div>
+                        <p id="qr-status" class="qr-status"></p>
                     </div>
                 </div>
             </div>
             
-            <!-- Records Tab -->
-            <div id="records-tab" class="tab-content">
-                <div class="card">
-                    <div class="search-bar">
-                        <input type="date" id="attendance-date-filter" class="form-input" style="width:auto;" onchange="loadAttendance(this.value)">
-                        <select id="section-filter" class="form-select section-select" style="width:auto;"><option value="">All Sections</option></select>
-                        <button class="btn btn-secondary" onclick="loadAttendance()">Refresh</button>
+            <!-- Footer -->
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <div class="footer-left"><strong>S.M.A.R.T</strong> &copy; 2024 All Rights Reserved</div>
+                    <div class="footer-right">
+                        <a href="tel:09688742671" class="footer-contact"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 09688742671</a>
+                        <span class="footer-divider"></span>
+                        <a href="mailto:deuscherhansbusiness@gmail.com" class="footer-contact"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> deuscherhansbusiness@gmail.com</a>
                     </div>
                 </div>
-                <div class="table-container">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Student</th>
-                                <th>Section</th>
-                                <th>Status</th>
-                                <th>Remarks</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-tbody">
-                            <tr><td colspan="6" class="text-center"><div class="loading"></div><p style="margin-top:8px;color:var(--text-secondary);">Loading...</p></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            </footer>
         </main>
     </div>
-    
     <script src="/js/script.js"></script>
 </body>
 </html>

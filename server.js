@@ -1,915 +1,184 @@
 // S.M.A.R.T — Student Management And Record Tracking
-// Enhanced with NFC Attendance, Role-Based Access, Archive System & Railway-Ready Deployment
-
+// Server — PostgreSQL (Supabase/Railway) + QR Code Attendance
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const mysql = require('mysql2/promise');
-const fs = require('fs');
-
-// Database configuration - supports Railway env vars and local XAMPP
-const dbConfig = {
-    host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.MYSQLPORT || process.env.DB_PORT || '3306'),
-    user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
-    password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '',
-    database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'checkmate_srms',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    charset: 'utf8mb4',
-    connectTimeout: 30000
-};
-
-// Support DATABASE_URL format (Railway) with proper SSL
-let pool;
-if (process.env.DATABASE_URL) {
-    pool = mysql.createPool({
-        uri: process.env.DATABASE_URL,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
-        charset: 'utf8mb4',
-        connectTimeout: 30000,
-        ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
-    });
-    console.log('[DB] Using DATABASE_URL for connection');
-} else if (process.env.MYSQLHOST) {
-    pool = mysql.createPool({
-        ...dbConfig,
-        ssl: process.env.RAILWAY_ENVIRONMENT ? { rejectUnauthorized: false } : undefined
-    });
-    console.log(`[DB] Using Railway env vars: ${dbConfig.host}:${dbConfig.port}`);
-} else {
-    pool = mysql.createPool(dbConfig);
-    console.log(`[DB] Using local config: ${dbConfig.host}:${dbConfig.port}`);
-}
-
-// Track database readiness
-let dbReady = false;
-
-// Auto-initialize database schema
-async function initializeDatabase(connection) {
-    try {
-        const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
-        if (tables.length > 0) {
-            console.log('[DB] Tables already exist');
-            // Run migrations for archive columns
-            await runMigrations(connection);
-            return;
-        }
-
-        console.log('[DB] Initializing database schema...');
-        const schemaPath = path.join(__dirname, 'database.sql');
-        if (fs.existsSync(schemaPath)) {
-            const schema = fs.readFileSync(schemaPath, 'utf8');
-            const statements = schema
-                .split(';')
-                .map(s => s.trim())
-                .filter(s => s.length > 0 && !s.startsWith('--'));
-
-            for (const statement of statements) {
-                try {
-                    await connection.query(statement);
-                } catch (err) {
-                    if (!err.message.includes('already exists') && !err.message.includes('Duplicate')) {
-                        console.warn('[DB] Schema warning:', err.message.substring(0, 100));
-                    }
-                }
-            }
-            console.log('[DB] Schema initialized successfully');
-        }
-    } catch (error) {
-        console.error('[DB] Initialization error:', error.message);
-    }
-}
-
-// Run migrations for existing databases
-async function runMigrations(connection) {
-    const migrations = [
-        "ALTER TABLE students ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
-        "ALTER TABLE students ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
-        "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
-        "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
-        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
-        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
-        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS is_archived TINYINT(1) DEFAULT 0",
-        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL DEFAULT NULL",
-        // Add student demo account if not exists
-        "INSERT IGNORE INTO users (name, email, password, role) VALUES ('John Michael Smith', 'john.smith@email.com', 'student123', 'student')"
-    ];
-
-    for (const sql of migrations) {
-        try {
-            await connection.query(sql);
-        } catch (err) {
-            // Silently ignore if column already exists or syntax not supported
-            if (!err.message.includes('Duplicate') && !err.message.includes('already exists')) {
-                // Try fallback without IF NOT EXISTS (older MySQL)
-                if (err.message.includes('IF NOT EXISTS')) {
-                    try {
-                        const fallback = sql.replace(' IF NOT EXISTS', '');
-                        await connection.query(fallback);
-                    } catch (e) { /* column already exists */ }
-                }
-            }
-        }
-    }
-    console.log('[DB] Migrations complete');
-}
-
-// Test database connection with retry logic
-async function testConnection(retries = 5, delay = 3000) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const connection = await pool.getConnection();
-            console.log('[DB] Connected to S.M.A.R.T Database');
-            await initializeDatabase(connection);
-            connection.release();
-            dbReady = true;
-            return true;
-        } catch (error) {
-            console.error(`[DB] Connection attempt ${attempt}/${retries} failed:`, error.message);
-            if (attempt < retries) {
-                const waitTime = delay * attempt;
-                console.log(`[DB] Retrying in ${waitTime / 1000}s...`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-            }
-        }
-    }
-    console.error('[DB] All connection attempts failed.');
-    return false;
-}
-
-// Database helper functions
-const db = {
-    async executeQuery(query, params = []) {
-        try {
-            const [rows] = await pool.execute(query, params);
-            return rows;
-        } catch (error) {
-            console.error('[DB] Query error:', error.message);
-            throw error;
-        }
-    },
-
-    async getOne(query, params = []) {
-        try {
-            const [rows] = await pool.execute(query, params);
-            return rows[0] || null;
-        } catch (error) {
-            console.error('[DB] Query error:', error.message);
-            throw error;
-        }
-    },
-
-    async insert(query, params = []) {
-        try {
-            const [result] = await pool.execute(query, params);
-            return result.insertId;
-        } catch (error) {
-            console.error('[DB] Insert error:', error.message);
-            throw error;
-        }
-    },
-
-    async update(query, params = []) {
-        try {
-            const [result] = await pool.execute(query, params);
-            return result.affectedRows;
-        } catch (error) {
-            console.error('[DB] Update error:', error.message);
-            throw error;
-        }
-    },
-
-    async deleteRecord(query, params = []) {
-        try {
-            const [result] = await pool.execute(query, params);
-            return result.affectedRows;
-        } catch (error) {
-            console.error('[DB] Delete error:', error.message);
-            throw error;
-        }
-    }
-};
+const { Pool } = require('pg');
+const QRCode = require('qrcode');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const isProduction = process.env.NODE_ENV === 'production';
 
-if (isProduction) {
-    app.set('trust proxy', 1);
-}
-
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// ============================================
+// MIDDLEWARE
+// ============================================
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'smart-srms-secure-session-key-2024',
+    secret: process.env.SESSION_SECRET || 'smart-srms-secret-2024',
     resave: false,
     saveUninitialized: false,
-    cookie: {
-        secure: isProduction,
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
-    }
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
+
+// ============================================
+// DATABASE — PostgreSQL
+// ============================================
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:Denielmar12%23@db.jaiwhmrxyhayjeintvws.supabase.co:5432/postgres';
+
+const pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: DATABASE_URL.includes('supabase') || DATABASE_URL.includes('railway') ? { rejectUnauthorized: false } : false,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
+});
+
+async function initDB() {
+    let client;
+    for (let i = 1; i <= 5; i++) {
+        try {
+            client = await pool.connect();
+            console.log('[DB] Connected to PostgreSQL');
+            await runMigrations(client);
+            client.release();
+            return true;
+        } catch (err) {
+            console.log(`[DB] Attempt ${i}/5 failed: ${err.message}`);
+            if (client) client.release();
+            if (i < 5) await new Promise(r => setTimeout(r, i * 3000));
+        }
+    }
+    console.log('[DB] All connection attempts failed');
+    return false;
+}
+
+async function runMigrations(client) {
+    // Create tables
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE,
+            password VARCHAR(100) NOT NULL, role VARCHAR(50) DEFAULT 'teacher', created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS sections (
+            id SERIAL PRIMARY KEY, section_name VARCHAR(50) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS students (
+            id SERIAL PRIMARY KEY, student_name VARCHAR(100) NOT NULL, section_id INT REFERENCES sections(id) ON DELETE SET NULL,
+            email VARCHAR(100), phone VARCHAR(20), address TEXT, date_of_birth DATE, gender VARCHAR(10),
+            enrollment_date DATE DEFAULT CURRENT_DATE, nfc_tag_id VARCHAR(100) DEFAULT NULL UNIQUE,
+            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS attendance (
+            id SERIAL PRIMARY KEY, student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            date DATE NOT NULL, status VARCHAR(20) NOT NULL, remarks TEXT,
+            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(student_id, date)
+        );
+        CREATE TABLE IF NOT EXISTS grades (
+            id SERIAL PRIMARY KEY, student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            subject VARCHAR(50) NOT NULL, grade VARCHAR(10) NOT NULL, score DECIMAL(5,2), max_score DECIMAL(5,2),
+            semester VARCHAR(20), academic_year VARCHAR(20),
+            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS announcements (
+            id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL,
+            target_audience VARCHAR(50) DEFAULT 'all', priority VARCHAR(20) DEFAULT 'normal', expires_at DATE,
+            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS qr_tokens (
+            id SERIAL PRIMARY KEY, token VARCHAR(100) NOT NULL UNIQUE, date DATE NOT NULL DEFAULT CURRENT_DATE,
+            created_by INT REFERENCES users(id), used BOOLEAN DEFAULT FALSE, used_at TIMESTAMP NULL,
+            expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT NOW()
+        );
+    `);
+
+    // Seed default data
+    await client.query(`INSERT INTO users (name, email, password, role) VALUES ('System Administrator','admin@smart-srms.com','admin123','admin'),('Demo Teacher','teacher@smart-srms.com','teacher123','teacher'),('John Michael Smith','john.smith@email.com','student123','student') ON CONFLICT (email) DO NOTHING`);
+    await client.query(`INSERT INTO sections (section_name) VALUES ('ICT-21'),('ICT-22'),('HMS-21'),('HMS-22'),('ABM-21'),('ABM-22'),('STM-21'),('STM-22'),('STM-23'),('STM-24'),('CUT-21'),('CUT-22') ON CONFLICT (section_name) DO NOTHING`);
+
+    console.log('[DB] Migrations complete');
+}
+
+// ============================================
+// HELPER: Query wrapper
+// ============================================
+async function query(text, params) {
+    const result = await pool.query(text, params);
+    return result;
+}
 
 // ============================================
 // AUTH MIDDLEWARE
 // ============================================
-const isAuthenticated = (req, res, next) => {
-    if (!req.session.user) {
-        return res.status(401).json({ success: false, message: 'Authentication required' });
-    }
-    next();
-};
-
-const isAdmin = (req, res, next) => {
-    if (!req.session.user || req.session.user.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'Admin access required' });
-    }
-    next();
-};
-
-const isTeacherOrAdmin = (req, res, next) => {
-    if (!req.session.user || (req.session.user.role !== 'admin' && req.session.user.role !== 'teacher')) {
-        return res.status(403).json({ success: false, message: 'Teacher or Admin access required' });
-    }
-    next();
-};
-
-const isTeacher = (req, res, next) => {
-    if (!req.session.user || req.session.user.role !== 'teacher') {
-        return res.status(403).json({ success: false, message: 'Teacher access required' });
-    }
-    next();
-};
+function isAuthenticated(req, res, next) {
+    if (req.session && req.session.user) return next();
+    return res.status(401).json({ success: false, message: 'Not authenticated' });
+}
+function isAdmin(req, res, next) {
+    if (req.session?.user?.role === 'admin') return next();
+    return res.status(403).json({ success: false, message: 'Admin access required' });
+}
+function isTeacher(req, res, next) {
+    if (req.session?.user?.role === 'teacher') return next();
+    return res.status(403).json({ success: false, message: 'Teacher access required' });
+}
+function isTeacherOrAdmin(req, res, next) {
+    const role = req.session?.user?.role;
+    if (role === 'admin' || role === 'teacher') return next();
+    return res.status(403).json({ success: false, message: 'Admin or Teacher access required' });
+}
 
 // ============================================
-// AUTHENTICATION API
+// PAGE ROUTING — Role-based
+// ============================================
+app.get('/', (req, res) => res.redirect('/login.html'));
+
+const restrictedPages = {
+    '/students.html': ['admin', 'teacher'],
+    '/attendance.html': ['admin', 'teacher'],
+    '/nfc-attendance.html': ['admin', 'teacher'],
+    '/archive.html': ['admin']
+};
+
+app.get(['/students.html', '/attendance.html', '/nfc-attendance.html', '/archive.html'], (req, res, next) => {
+    if (!req.session?.user) return res.redirect('/login.html');
+    const allowed = restrictedPages[req.path];
+    if (allowed && !allowed.includes(req.session.user.role)) return res.redirect('/announcements.html');
+    next();
+});
+
+// After login, redirect to announcements instead of dashboard
+app.get(['/dashboard.html'], (req, res, next) => {
+    if (!req.session?.user) return res.redirect('/login.html');
+    next();
+});
+
+// ============================================
+// AUTH API
 // ============================================
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'Email and password are required' });
-        }
-
-        const user = await db.getOne('SELECT * FROM users WHERE email = ?', [email]);
-
-        if (!user || password !== user.password) {
-            return res.status(401).json({ success: false, message: 'Invalid email or password' });
-        }
-
-        // For student role, find linked student record
-        let studentId = null;
-        if (user.role === 'student') {
-            const student = await db.getOne('SELECT id FROM students WHERE email = ? AND is_archived = 0', [email]);
-            if (student) studentId = student.id;
-        }
-
-        req.session.user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            studentId: studentId
-        };
-
-        res.json({
-            success: true,
-            message: 'Login successful',
-            user: req.session.user
-        });
-
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-    }
-});
-
-app.post('/api/auth/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) return res.status(500).json({ success: false, message: 'Logout failed' });
-        res.json({ success: true, message: 'Logged out successfully' });
-    });
+        const result = await query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) return res.json({ success: false, message: 'Invalid credentials' });
+        const user = result.rows[0];
+        if (user.password !== password) return res.json({ success: false, message: 'Invalid credentials' });
+        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
+        res.json({ success: true, user: req.session.user });
+    } catch (err) { console.error('Login error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
 app.get('/api/auth/status', (req, res) => {
-    if (req.session.user) {
-        res.json({ success: true, authenticated: true, user: req.session.user });
-    } else {
-        res.json({ success: false, authenticated: false });
-    }
+    if (req.session?.user) return res.json({ success: true, user: req.session.user });
+    res.json({ success: false });
 });
 
-// ============================================
-// STUDENTS API (Admin/Teacher only for write)
-// ============================================
-app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const query = `
-            SELECT s.id, s.student_name, s.email, s.phone, s.address, s.date_of_birth, s.gender, s.enrollment_date, s.section_id, s.nfc_tag_id, sec.section_name 
-            FROM students s 
-            LEFT JOIN sections sec ON s.section_id = sec.id 
-            WHERE s.is_archived = 0
-            ORDER BY s.student_name
-        `;
-        const students = await db.executeQuery(query);
-        res.json({ success: true, data: students });
-    } catch (error) {
-        console.error('Get students error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch students' });
-    }
-});
-
-// Teacher and admin can add students
-app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
-
-        if (!student_name) {
-            return res.status(400).json({ success: false, message: 'Student name is required' });
-        }
-
-        const query = 'INSERT INTO students (student_name, section_id, email, phone, address, date_of_birth, gender) VALUES (?, ?, ?, ?, ?, ?, ?)';
-        const studentId = await db.insert(query, [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null]);
-
-        res.json({
-            success: true,
-            message: 'Student added successfully',
-            data: { id: studentId, student_name, section_id, email, phone, address, date_of_birth, gender }
-        });
-    } catch (error) {
-        console.error('Add student error:', error);
-        res.status(500).json({ success: false, message: 'Failed to add student' });
-    }
-});
-
-// Teacher and admin can edit students
-app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
-
-        if (!student_name) {
-            return res.status(400).json({ success: false, message: 'Student name is required' });
-        }
-
-        const query = 'UPDATE students SET student_name = ?, section_id = ?, email = ?, phone = ?, address = ?, date_of_birth = ?, gender = ? WHERE id = ? AND is_archived = 0';
-        const affectedRows = await db.update(query, [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null, id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Student not found' });
-        }
-
-        res.json({ success: true, message: 'Student updated successfully' });
-    } catch (error) {
-        console.error('Update student error:', error);
-        res.status(500).json({ success: false, message: 'Failed to update student' });
-    }
-});
-
-// Admin only can archive (soft-delete) students
-app.delete('/api/students/:id', isAuthenticated, isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const affectedRows = await db.update('UPDATE students SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Student not found' });
-        }
-
-        res.json({ success: true, message: 'Student archived successfully' });
-    } catch (error) {
-        console.error('Archive student error:', error);
-        res.status(500).json({ success: false, message: 'Failed to archive student' });
-    }
-});
-
-app.get('/api/students/search/:query', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { query } = req.params;
-        const searchQuery = `
-            SELECT s.id, s.student_name, s.email, s.phone, s.gender, s.section_id, s.nfc_tag_id, sec.section_name 
-            FROM students s 
-            LEFT JOIN sections sec ON s.section_id = sec.id 
-            WHERE s.is_archived = 0 AND (s.student_name LIKE ? OR s.email LIKE ?)
-            ORDER BY s.student_name
-        `;
-        const searchPattern = `%${query}%`;
-        const students = await db.executeQuery(searchQuery, [searchPattern, searchPattern]);
-        res.json({ success: true, data: students });
-    } catch (error) {
-        console.error('Search students error:', error);
-        res.status(500).json({ success: false, message: 'Failed to search students' });
-    }
-});
-
-// NFC Tag Assignment (teacher/admin)
-app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { nfc_tag_id } = req.body;
-
-        if (!nfc_tag_id) {
-            return res.status(400).json({ success: false, message: 'NFC tag ID is required' });
-        }
-
-        const existing = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ? AND id != ? AND is_archived = 0', [nfc_tag_id, id]);
-        if (existing) {
-            return res.status(400).json({ success: false, message: `This tag is already assigned to ${existing.student_name}` });
-        }
-
-        const affectedRows = await db.update('UPDATE students SET nfc_tag_id = ? WHERE id = ? AND is_archived = 0', [nfc_tag_id, id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Student not found' });
-        }
-
-        res.json({ success: true, message: 'NFC tag assigned successfully' });
-    } catch (error) {
-        console.error('Assign NFC tag error:', error);
-        res.status(500).json({ success: false, message: 'Failed to assign NFC tag' });
-    }
-});
-
-// NFC Student Lookup
-app.get('/api/students/nfc/:tagId', isAuthenticated, async (req, res) => {
-    try {
-        const { tagId } = req.params;
-        const student = await db.getOne(`
-            SELECT s.id, s.student_name, s.email, s.section_id, s.nfc_tag_id, sec.section_name 
-            FROM students s 
-            LEFT JOIN sections sec ON s.section_id = sec.id 
-            WHERE s.nfc_tag_id = ? AND s.is_archived = 0
-        `, [tagId]);
-
-        if (student) {
-            res.json({ success: true, data: student });
-        } else {
-            res.json({ success: false, message: 'No student found with this NFC tag' });
-        }
-    } catch (error) {
-        console.error('NFC lookup error:', error);
-        res.status(500).json({ success: false, message: 'Failed to lookup NFC tag' });
-    }
-});
-
-// ============================================
-// ATTENDANCE API (Teacher/Admin only)
-// ============================================
-app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { date, student_id, section_id } = req.query;
-        let query = `
-            SELECT a.id, a.student_id, a.date, a.status, a.remarks, a.created_at,
-                   s.student_name, s.section_id, sec.section_name
-            FROM attendance a
-            JOIN students s ON a.student_id = s.id
-            LEFT JOIN sections sec ON s.section_id = sec.id
-            WHERE a.is_archived = 0
-        `;
-        const params = [];
-
-        if (date) { query += ' AND a.date = ?'; params.push(date); }
-        if (student_id) { query += ' AND a.student_id = ?'; params.push(student_id); }
-        if (section_id) { query += ' AND s.section_id = ?'; params.push(section_id); }
-
-        query += ' ORDER BY a.date DESC, s.student_name';
-
-        const attendance = await db.executeQuery(query, params);
-        res.json({ success: true, data: attendance });
-    } catch (error) {
-        console.error('Get attendance error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch attendance records' });
-    }
-});
-
-app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { attendanceRecords } = req.body;
-
-        if (!attendanceRecords || !Array.isArray(attendanceRecords)) {
-            return res.status(400).json({ success: false, message: 'Attendance records array is required' });
-        }
-
-        const today = new Date().toISOString().split('T')[0];
-        const results = [];
-
-        for (const record of attendanceRecords) {
-            const { student_id, status, remarks } = record;
-            if (!student_id || !status) {
-                results.push({ student_id, success: false, message: 'Student ID and status are required' });
-                continue;
-            }
-
-            try {
-                const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND is_archived = 0', [student_id, today]);
-
-                if (existing) {
-                    await db.update('UPDATE attendance SET status = ?, remarks = ? WHERE student_id = ? AND date = ? AND is_archived = 0', [status, remarks || null, student_id, today]);
-                    results.push({ student_id, success: true, message: 'Attendance updated' });
-                } else {
-                    await db.insert('INSERT INTO attendance (student_id, date, status, remarks) VALUES (?, ?, ?, ?)', [student_id, today, status, remarks || null]);
-                    results.push({ student_id, success: true, message: 'Attendance recorded' });
-                }
-            } catch (error) {
-                results.push({ student_id, success: false, message: 'Failed to record attendance' });
-            }
-        }
-
-        res.json({ success: true, message: 'Attendance processing completed', data: results });
-    } catch (error) {
-        console.error('Submit attendance error:', error);
-        res.status(500).json({ success: false, message: 'Failed to submit attendance' });
-    }
-});
-
-// NFC Attendance (teacher/admin)
-app.post('/api/attendance/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { nfc_tag_id } = req.body;
-
-        if (!nfc_tag_id) {
-            return res.status(400).json({ success: false, message: 'NFC tag ID is required' });
-        }
-
-        const student = await db.getOne('SELECT id, student_name FROM students WHERE nfc_tag_id = ? AND is_archived = 0', [nfc_tag_id]);
-
-        if (!student) {
-            return res.status(404).json({ success: false, message: 'No student found with this NFC tag' });
-        }
-
-        const today = new Date().toISOString().split('T')[0];
-        const existing = await db.getOne('SELECT id FROM attendance WHERE student_id = ? AND date = ? AND is_archived = 0', [student.id, today]);
-
-        if (existing) {
-            await db.update('UPDATE attendance SET status = ? WHERE student_id = ? AND date = ? AND is_archived = 0', ['Present', student.id, today]);
-        } else {
-            await db.insert('INSERT INTO attendance (student_id, date, status, remarks) VALUES (?, ?, ?, ?)', [student.id, today, 'Present', 'NFC Check-in']);
-        }
-
-        res.json({
-            success: true,
-            message: `Attendance marked for ${student.student_name}`,
-            data: { student_id: student.id, student_name: student.student_name, status: 'Present' }
-        });
-    } catch (error) {
-        console.error('NFC attendance error:', error);
-        res.status(500).json({ success: false, message: 'Failed to record NFC attendance' });
-    }
-});
-
-// Archive attendance (teacher/admin)
-app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const affectedRows = await db.update('UPDATE attendance SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Attendance record not found' });
-        }
-
-        res.json({ success: true, message: 'Attendance record archived' });
-    } catch (error) {
-        console.error('Archive attendance error:', error);
-        res.status(500).json({ success: false, message: 'Failed to archive attendance record' });
-    }
-});
-
-app.get('/api/attendance/stats', isAuthenticated, async (req, res) => {
-    try {
-        const { period = 'month' } = req.query;
-        let dateCondition = '';
-
-        switch (period) {
-            case 'week': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'; break;
-            case 'month': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)'; break;
-            case 'year': dateCondition = 'AND a.date >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)'; break;
-        }
-
-        const stats = await db.getOne(`
-            SELECT 
-                COUNT(*) as total_records,
-                SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) as present,
-                SUM(CASE WHEN a.status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN a.status = 'Excused' THEN 1 ELSE 0 END) as excused
-            FROM attendance a
-            WHERE a.is_archived = 0 ${dateCondition}
-        `);
-        res.json({ success: true, data: stats });
-    } catch (error) {
-        console.error('Get attendance stats error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch attendance statistics' });
-    }
-});
-
-// ============================================
-// GRADES API — Teacher can add/delete, Admin can only view, Student sees own
-// ============================================
-app.get('/api/grades', isAuthenticated, async (req, res) => {
-    try {
-        const { student_id, subject, semester } = req.query;
-        const user = req.session.user;
-
-        let query = `
-            SELECT g.id, g.student_id, g.subject, g.grade, g.score, g.max_score, g.semester, g.academic_year, g.created_at,
-                   s.student_name, s.section_id, sec.section_name
-            FROM grades g
-            JOIN students s ON g.student_id = s.id
-            LEFT JOIN sections sec ON s.section_id = sec.id
-            WHERE g.is_archived = 0
-        `;
-        const params = [];
-
-        // Student role: only see own grades
-        if (user.role === 'student') {
-            if (user.studentId) {
-                query += ' AND g.student_id = ?';
-                params.push(user.studentId);
-            } else {
-                return res.json({ success: true, data: [] });
-            }
-        }
-
-        if (student_id) { query += ' AND g.student_id = ?'; params.push(student_id); }
-        if (subject) { query += ' AND g.subject = ?'; params.push(subject); }
-        if (semester) { query += ' AND g.semester = ?'; params.push(semester); }
-
-        query += ' ORDER BY g.academic_year DESC, g.semester DESC, s.student_name';
-
-        const grades = await db.executeQuery(query, params);
-        res.json({ success: true, data: grades });
-    } catch (error) {
-        console.error('Get grades error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch grades' });
-    }
-});
-
-// Only teachers can add grades
-app.post('/api/grades', isAuthenticated, isTeacher, async (req, res) => {
-    try {
-        const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
-
-        if (!student_id || !subject || !grade) {
-            return res.status(400).json({ success: false, message: 'Student ID, subject, and grade are required' });
-        }
-
-        const query = 'INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES (?, ?, ?, ?, ?, ?, ?)';
-        const gradeId = await db.insert(query, [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
-
-        res.json({
-            success: true,
-            message: 'Grade added successfully',
-            data: { id: gradeId, student_id, subject, grade, score, max_score, semester, academic_year }
-        });
-    } catch (error) {
-        console.error('Add grade error:', error);
-        res.status(500).json({ success: false, message: 'Failed to add grade' });
-    }
-});
-
-// Only teachers can archive grades
-app.delete('/api/grades/:id', isAuthenticated, isTeacher, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const affectedRows = await db.update('UPDATE grades SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Grade record not found' });
-        }
-
-        res.json({ success: true, message: 'Grade archived' });
-    } catch (error) {
-        console.error('Archive grade error:', error);
-        res.status(500).json({ success: false, message: 'Failed to archive grade' });
-    }
-});
-
-// ============================================
-// ANNOUNCEMENTS API — Admin/Teacher can write, Student can read
-// ============================================
-app.get('/api/announcements', isAuthenticated, async (req, res) => {
-    try {
-        const { limit = 50, target_audience } = req.query;
-        let query = `
-            SELECT id, title, content, target_audience, priority, expires_at, created_at, updated_at
-            FROM announcements
-            WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())
-        `;
-        const params = [];
-
-        if (target_audience && target_audience !== 'all') {
-            query += ' AND (target_audience = ? OR target_audience = ?)';
-            params.push(target_audience, 'all');
-        }
-
-        query += ' ORDER BY priority DESC, created_at DESC LIMIT ?';
-        params.push(parseInt(limit));
-
-        const announcements = await db.executeQuery(query, params);
-        res.json({ success: true, data: announcements });
-    } catch (error) {
-        console.error('Get announcements error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch announcements' });
-    }
-});
-
-app.get('/api/announcements/latest', isAuthenticated, async (req, res) => {
-    try {
-        const { limit = 5 } = req.query;
-        const query = `
-            SELECT id, title, content, target_audience, priority, expires_at, created_at, updated_at
-            FROM announcements
-            WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())
-            ORDER BY priority DESC, created_at DESC
-            LIMIT ?
-        `;
-        const announcements = await db.executeQuery(query, [parseInt(limit)]);
-        res.json({ success: true, data: announcements });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch latest announcements' });
-    }
-});
-
-app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const announcement = await db.getOne('SELECT * FROM announcements WHERE id = ? AND is_archived = 0', [id]);
-
-        if (!announcement) {
-            return res.status(404).json({ success: false, message: 'Announcement not found' });
-        }
-
-        res.json({ success: true, data: announcement });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch announcement' });
-    }
-});
-
-// Teacher/Admin can create announcements
-app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { title, content, target_audience, priority, expires_at } = req.body;
-
-        if (!title || !content) {
-            return res.status(400).json({ success: false, message: 'Title and content are required' });
-        }
-
-        if (title.length > 255) {
-            return res.status(400).json({ success: false, message: 'Title must be less than 255 characters' });
-        }
-
-        const query = 'INSERT INTO announcements (title, content, target_audience, priority, expires_at) VALUES (?, ?, ?, ?, ?)';
-        const announcementId = await db.insert(query, [title, content, target_audience || 'all', priority || 'normal', expires_at || null]);
-
-        const createdAnnouncement = await db.getOne('SELECT * FROM announcements WHERE id = ?', [announcementId]);
-
-        res.json({ success: true, message: 'Announcement created successfully', data: createdAnnouncement });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to create announcement' });
-    }
-});
-
-// Teacher/Admin can update announcements
-app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { title, content, target_audience, priority, expires_at } = req.body;
-
-        if (!title || !content) {
-            return res.status(400).json({ success: false, message: 'Title and content are required' });
-        }
-
-        const query = 'UPDATE announcements SET title = ?, content = ?, target_audience = ?, priority = ?, expires_at = ? WHERE id = ? AND is_archived = 0';
-        const affectedRows = await db.update(query, [title, content, target_audience || 'all', priority || 'normal', expires_at || null, id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Announcement not found' });
-        }
-
-        res.json({ success: true, message: 'Announcement updated successfully' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to update announcement' });
-    }
-});
-
-// Admin only can archive announcements
-app.delete('/api/announcements/:id', isAuthenticated, isAdmin, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const affectedRows = await db.update('UPDATE announcements SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Announcement not found' });
-        }
-
-        res.json({ success: true, message: 'Announcement archived' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to archive announcement' });
-    }
-});
-
-// ============================================
-// ARCHIVE API (Admin only — view, restore, permanent delete)
-// ============================================
-app.get('/api/archive/:type', isAuthenticated, isAdmin, async (req, res) => {
-    try {
-        const { type } = req.params;
-        let query = '';
-
-        switch (type) {
-            case 'students':
-                query = `SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = 1 ORDER BY s.archived_at DESC`;
-                break;
-            case 'attendance':
-                query = `SELECT a.*, s.student_name, sec.section_name FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE a.is_archived = 1 ORDER BY a.archived_at DESC`;
-                break;
-            case 'grades':
-                query = `SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = 1 ORDER BY g.archived_at DESC`;
-                break;
-            case 'announcements':
-                query = `SELECT * FROM announcements WHERE is_archived = 1 ORDER BY archived_at DESC`;
-                break;
-            default:
-                return res.status(400).json({ success: false, message: 'Invalid archive type' });
-        }
-
-        const records = await db.executeQuery(query);
-        res.json({ success: true, data: records });
-    } catch (error) {
-        console.error('Get archive error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch archived records' });
-    }
-});
-
-// Restore from archive
-app.post('/api/archive/:type/:id/restore', isAuthenticated, isAdmin, async (req, res) => {
-    try {
-        const { type, id } = req.params;
-        const tableMap = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
-        const table = tableMap[type];
-
-        if (!table) {
-            return res.status(400).json({ success: false, message: 'Invalid archive type' });
-        }
-
-        const affectedRows = await db.update(`UPDATE ${table} SET is_archived = 0, archived_at = NULL WHERE id = ? AND is_archived = 1`, [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Archived record not found' });
-        }
-
-        res.json({ success: true, message: 'Record restored successfully' });
-    } catch (error) {
-        console.error('Restore archive error:', error);
-        res.status(500).json({ success: false, message: 'Failed to restore record' });
-    }
-});
-
-// Permanent delete from archive
-app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) => {
-    try {
-        const { type, id } = req.params;
-        const tableMap = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
-        const table = tableMap[type];
-
-        if (!table) {
-            return res.status(400).json({ success: false, message: 'Invalid archive type' });
-        }
-
-        const affectedRows = await db.deleteRecord(`DELETE FROM ${table} WHERE id = ? AND is_archived = 1`, [id]);
-
-        if (affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Archived record not found' });
-        }
-
-        res.json({ success: true, message: 'Record permanently deleted' });
-    } catch (error) {
-        console.error('Permanent delete error:', error);
-        res.status(500).json({ success: false, message: 'Failed to delete record' });
-    }
-});
-
-// ============================================
-// SECTIONS API
-// ============================================
-app.get('/api/sections', isAuthenticated, async (req, res) => {
-    try {
-        const sections = await db.executeQuery('SELECT id, section_name FROM sections ORDER BY section_name');
-        res.json({ success: true, data: sections });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch sections' });
-    }
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy(() => res.json({ success: true }));
 });
 
 // ============================================
@@ -917,156 +186,356 @@ app.get('/api/sections', isAuthenticated, async (req, res) => {
 // ============================================
 app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
     try {
-        const user = req.session.user;
-
-        // Student gets limited stats
-        if (user.role === 'student') {
-            const gradeCount = user.studentId
-                ? await db.getOne('SELECT COUNT(*) as count FROM grades WHERE student_id = ? AND is_archived = 0', [user.studentId])
-                : { count: 0 };
-            const announcementCount = await db.getOne('SELECT COUNT(*) as count FROM announcements WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())');
-
-            return res.json({
-                success: true,
-                data: {
-                    totalStudents: 0,
-                    todayAttendance: 0,
-                    totalGrades: gradeCount.count,
-                    activeAnnouncements: announcementCount.count,
-                    attendanceStats: { total: 0, present: 0, absent: 0, excused: 0 }
-                }
-            });
+        const role = req.session.user.role;
+        let stats = {};
+        if (role === 'student') {
+            const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
+            const studentId = studentResult.rows[0]?.id;
+            const gradesResult = studentId ? await query("SELECT COUNT(*) as count FROM grades WHERE student_id = $1 AND is_archived = false", [studentId]) : { rows: [{ count: 0 }] };
+            const annResult = await query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false");
+            stats = { totalGrades: parseInt(gradesResult.rows[0].count), activeAnnouncements: parseInt(annResult.rows[0].count) };
+        } else {
+            const [students, attendance, grades, announcements] = await Promise.all([
+                query("SELECT COUNT(*) as count FROM students WHERE is_archived = false"),
+                query("SELECT COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false"),
+                query("SELECT COUNT(*) as count FROM grades WHERE is_archived = false"),
+                query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false")
+            ]);
+            const attStats = await query("SELECT status, COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false GROUP BY status");
+            const attendanceStats = { present: 0, absent: 0, excused: 0 };
+            attStats.rows.forEach(r => { attendanceStats[r.status.toLowerCase()] = parseInt(r.count); });
+            stats = {
+                totalStudents: parseInt(students.rows[0].count), todayAttendance: parseInt(attendance.rows[0].count),
+                totalGrades: parseInt(grades.rows[0].count), activeAnnouncements: parseInt(announcements.rows[0].count),
+                attendanceStats
+            };
         }
+        res.json({ success: true, data: stats });
+    } catch (err) { console.error('Dashboard error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
+});
 
-        const [studentCount, attendanceCount, gradeCount, announcementCount] = await Promise.all([
-            db.getOne('SELECT COUNT(*) as count FROM students WHERE is_archived = 0'),
-            db.getOne('SELECT COUNT(*) as count FROM attendance WHERE date = CURDATE() AND is_archived = 0'),
-            db.getOne('SELECT COUNT(*) as count FROM grades WHERE is_archived = 0'),
-            db.getOne('SELECT COUNT(*) as count FROM announcements WHERE is_archived = 0 AND (expires_at IS NULL OR expires_at >= CURDATE())')
-        ]);
+// ============================================
+// STUDENTS API
+// ============================================
+app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const result = await query("SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false ORDER BY s.student_name");
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
 
-        const attendanceStats = await db.getOne(`
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,
-                SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                SUM(CASE WHEN status = 'Excused' THEN 1 ELSE 0 END) as excused
-            FROM attendance 
-            WHERE date = CURDATE() AND is_archived = 0
+app.get('/api/students/search/:q', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const q = `%${req.params.q}%`;
+        const result = await query("SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false AND (s.student_name ILIKE $1 OR s.email ILIKE $1) ORDER BY s.student_name", [q]);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
+        await query("INSERT INTO students (student_name, section_id, email, phone, address, date_of_birth, gender) VALUES ($1,$2,$3,$4,$5,$6,$7)", [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
+        await query("UPDATE students SET student_name=$1, section_id=$2, email=$3, phone=$4, address=$5, date_of_birth=$6, gender=$7 WHERE id=$8", [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/students/:id', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        await query("UPDATE students SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.get('/api/students/nfc/:tagId', isAuthenticated, async (req, res) => {
+    try {
+        const result = await query("SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.nfc_tag_id = $1 AND s.is_archived = false", [req.params.tagId]);
+        if (result.rows.length === 0) return res.json({ success: false, message: 'Student not found' });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        await query("UPDATE students SET nfc_tag_id = $1 WHERE id = $2", [req.body.nfc_tag_id, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// ATTENDANCE API — Timeline
+// ============================================
+app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const date = req.query.date || null;
+        const section = req.query.section_id || null;
+        let sql = "SELECT a.*, s.student_name, sec.section_name FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE a.is_archived = false";
+        const params = [];
+        let idx = 1;
+        if (date) { sql += ` AND a.date = $${idx++}`; params.push(date); }
+        if (section) { sql += ` AND s.section_id = $${idx++}`; params.push(section); }
+        sql += " ORDER BY a.date DESC, s.student_name LIMIT 500";
+        const result = await query(sql, params);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// Get attendance dates with summary counts
+app.get('/api/attendance/dates', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const result = await query(`
+            SELECT date, 
+                COUNT(*) FILTER (WHERE status = 'Present') as present,
+                COUNT(*) FILTER (WHERE status = 'Absent') as absent,
+                COUNT(*) FILTER (WHERE status = 'Excused') as excused,
+                COUNT(*) as total
+            FROM attendance WHERE is_archived = false 
+            GROUP BY date ORDER BY date DESC LIMIT 90
         `);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
 
-        res.json({
-            success: true,
-            data: {
-                totalStudents: studentCount.count,
-                todayAttendance: attendanceCount.count,
-                totalGrades: gradeCount.count,
-                activeAnnouncements: announcementCount.count,
-                attendanceStats: attendanceStats
-            }
-        });
-    } catch (error) {
-        console.error('Get dashboard stats error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch dashboard statistics' });
-    }
+app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { attendanceRecords } = req.body;
+        for (const record of attendanceRecords) {
+            await query("INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, $2, $3) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3", [record.student_id, record.status, record.remarks || null]);
+        }
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
+    try {
+        const { nfc_tag_id } = req.body;
+        const studentResult = await query("SELECT id FROM students WHERE nfc_tag_id = $1 AND is_archived = false", [nfc_tag_id]);
+        if (studentResult.rows.length === 0) return res.json({ success: false, message: 'Unknown NFC tag' });
+        await query("INSERT INTO attendance (student_id, date, status) VALUES ($1, CURRENT_DATE, 'Present') ON CONFLICT (student_id, date) DO UPDATE SET status = 'Present'", [studentResult.rows[0].id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        await query("UPDATE attendance SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
 // ============================================
-// SERVE HTML PAGES
+// QR CODE ATTENDANCE
 // ============================================
-app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+app.post('/api/qr/generate', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const token = uuidv4();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
+        await query("INSERT INTO qr_tokens (token, date, created_by, expires_at) VALUES ($1, CURRENT_DATE, $2, $3)", [token, req.session.user.id, expiresAt]);
+        const qrUrl = `${req.protocol}://${req.get('host')}/api/qr/scan/${token}`;
+        const qrImage = await QRCode.toDataURL(qrUrl, { width: 300, margin: 2, color: { dark: '#0F172A', light: '#FFFFFF' } });
+        res.json({ success: true, data: { token, qrImage, expiresAt: expiresAt.toISOString(), url: qrUrl } });
+    } catch (err) { console.error('QR generate error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.get(['/dashboard.html', '/'], (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+app.get('/api/qr/scan/:token', async (req, res) => {
+    try {
+        const result = await query("SELECT * FROM qr_tokens WHERE token = $1", [req.params.token]);
+        if (result.rows.length === 0) return res.send(qrResultPage('Invalid QR Code', 'This QR code is not recognized.', 'error'));
+        const qr = result.rows[0];
+        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned.', 'warning'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('Expired', 'This QR code has expired. Ask your teacher for a new one.', 'error'));
+        // Show scan form
+        res.send(qrScanPage(req.params.token));
+    } catch (err) { res.status(500).send(qrResultPage('Error', 'Something went wrong.', 'error')); }
 });
 
-app.get('/students.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    // Students role redirected to dashboard
-    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
-    res.sendFile(path.join(__dirname, 'public', 'students.html'));
+app.post('/api/qr/scan/:token', express.urlencoded({ extended: true }), async (req, res) => {
+    try {
+        const tokenResult = await query("SELECT * FROM qr_tokens WHERE token = $1", [req.params.token]);
+        if (tokenResult.rows.length === 0) return res.send(qrResultPage('Invalid', 'QR code not found.', 'error'));
+        const qr = tokenResult.rows[0];
+        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code was already scanned.', 'warning'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('Expired', 'This QR code has expired.', 'error'));
+
+        const { student_id } = req.body;
+        const studentResult = await query("SELECT s.student_name FROM students s WHERE s.id = $1 AND s.is_archived = false", [student_id]);
+        if (studentResult.rows.length === 0) return res.send(qrResultPage('Not Found', 'Student not found.', 'error'));
+
+        await query("INSERT INTO attendance (student_id, date, status) VALUES ($1, CURRENT_DATE, 'Present') ON CONFLICT (student_id, date) DO UPDATE SET status = 'Present'", [student_id]);
+        await query("UPDATE qr_tokens SET used = true, used_at = NOW() WHERE token = $1", [req.params.token]);
+
+        res.send(qrResultPage('Attendance Recorded', `${studentResult.rows[0].student_name} marked as Present!`, 'success'));
+    } catch (err) { res.status(500).send(qrResultPage('Error', 'Something went wrong.', 'error')); }
 });
 
-app.get('/attendance.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
-    res.sendFile(path.join(__dirname, 'public', 'attendance.html'));
-});
-
-app.get('/grades.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    res.sendFile(path.join(__dirname, 'public', 'grades.html'));
-});
-
-app.get('/announcements.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    res.sendFile(path.join(__dirname, 'public', 'announcements.html'));
-});
-
-app.get('/nfc-attendance.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    if (req.session.user.role === 'student') return res.redirect('/dashboard.html');
-    res.sendFile(path.join(__dirname, 'public', 'nfc-attendance.html'));
-});
-
-app.get('/archive.html', (req, res) => {
-    if (!req.session.user) return res.redirect('/login.html');
-    if (req.session.user.role !== 'admin') return res.redirect('/dashboard.html');
-    res.sendFile(path.join(__dirname, 'public', 'archive.html'));
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ success: true, status: 'running', database: dbReady ? 'connected' : 'connecting', timestamp: new Date().toISOString() });
-});
-
-// Error handling
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-});
-
-app.use((req, res) => {
-    res.status(404).json({ success: false, message: 'Route not found' });
-});
-
-// Start server
-async function startServer() {
-    const server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
-        console.log(`[S.M.A.R.T] Login: http://localhost:${PORT}/login.html`);
-        if (isProduction) console.log('[S.M.A.R.T] Running in PRODUCTION mode');
-    });
-
-    const dbConnected = await testConnection();
-    if (!dbConnected) {
-        console.log('[S.M.A.R.T] Server running, database reconnecting in background...');
-        const retryInterval = setInterval(async () => {
-            try {
-                const connection = await pool.getConnection();
-                console.log('[DB] Reconnected!');
-                await initializeDatabase(connection);
-                connection.release();
-                dbReady = true;
-                clearInterval(retryInterval);
-            } catch (err) {
-                console.log('[DB] Still waiting...', err.message);
-            }
-        }, 15000);
-    }
-
-    const shutdown = async () => {
-        console.log('\n[S.M.A.R.T] Shutting down...');
-        server.close();
-        await pool.end();
-        process.exit(0);
-    };
-
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+function qrScanPage(token) {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S.M.A.R.T Attendance</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',sans-serif;background:#F8FAFC;color:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.card{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;border:1px solid #E2E8F0}.logo{font-size:24px;font-weight:700;background:linear-gradient(135deg,#2563EB,#0EA5E9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}.subtitle{color:#475569;font-size:14px;margin-bottom:20px}select,button{width:100%;padding:12px;border-radius:8px;font-size:15px;font-family:inherit}select{border:1.5px solid #E2E8F0;background:#F1F5F9;color:#0F172A;margin-bottom:12px;cursor:pointer}button{background:#2563EB;color:#fff;border:none;font-weight:600;cursor:pointer}button:hover{background:#1D4ED8}</style></head><body><div class="card"><h1 class="logo">S.M.A.R.T</h1><p class="subtitle">Select your name to mark attendance</p><form method="POST" action="/api/qr/scan/${token}" id="scanForm"><select name="student_id" required id="studentSelect"><option value="">Loading students...</option></select><button type="submit">Mark Present</button></form></div><script>fetch('/api/students/list-for-qr').then(r=>r.json()).then(d=>{const s=document.getElementById('studentSelect');s.innerHTML='<option value="">-- Select Your Name --</option>';if(d.success)d.data.forEach(st=>{const o=document.createElement('option');o.value=st.id;o.textContent=st.student_name+' ('+st.section_name+')';s.appendChild(o)})}).catch(()=>{document.getElementById('studentSelect').innerHTML='<option>Error loading</option>'})</script></body></html>`;
 }
 
-startServer();
+function qrResultPage(title, message, type) {
+    const colors = { success: '#16A34A', error: '#DC2626', warning: '#D97706' };
+    const bg = { success: '#F0FDF4', error: '#FEF2F2', warning: '#FFFBEB' };
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - S.M.A.R.T</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',sans-serif;background:${bg[type]||'#F8FAFC'};min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.card{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;border:2px solid ${colors[type]||'#E2E8F0'}}h1{color:${colors[type]};font-size:22px;margin-bottom:8px}p{color:#475569;font-size:15px;line-height:1.5}</style></head><body><div class="card"><h1>${title}</h1><p>${message}</p></div></body></html>`;
+}
+
+// Public student list for QR scan page (no auth required)
+app.get('/api/students/list-for-qr', async (req, res) => {
+    try {
+        const result = await query("SELECT s.id, s.student_name, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false ORDER BY s.student_name");
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// GRADES API
+// ============================================
+app.get('/api/grades', isAuthenticated, async (req, res) => {
+    try {
+        const role = req.session.user.role;
+        let sql, params = [];
+        if (role === 'student') {
+            const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
+            if (studentResult.rows.length === 0) return res.json({ success: true, data: [] });
+            sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false AND g.student_id = $1 ORDER BY g.created_at DESC";
+            params = [studentResult.rows[0].id];
+        } else {
+            sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
+            const idx = 1;
+            if (req.query.student_id) { sql += ` AND g.student_id = $${idx}`; params.push(req.query.student_id); }
+            if (req.query.semester) { sql += ` AND g.semester = $${params.length + 1}`; params.push(req.query.semester); }
+            sql += " ORDER BY g.created_at DESC";
+        }
+        const result = await query(sql, params);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/grades', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
+        await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES ($1,$2,$3,$4,$5,$6,$7)", [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/grades/:id', isAuthenticated, isTeacher, async (req, res) => {
+    try {
+        await query("UPDATE grades SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// ANNOUNCEMENTS API
+// ============================================
+app.get('/api/announcements', isAuthenticated, async (req, res) => {
+    try {
+        const result = await query("SELECT * FROM announcements WHERE is_archived = false ORDER BY priority DESC, created_at DESC");
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.get('/api/announcements/latest', isAuthenticated, async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 5;
+        const result = await query("SELECT * FROM announcements WHERE is_archived = false ORDER BY priority DESC, created_at DESC LIMIT $1", [limit]);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
+    try {
+        const result = await query("SELECT * FROM announcements WHERE id = $1", [req.params.id]);
+        if (result.rows.length === 0) return res.json({ success: false, message: 'Not found' });
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { title, content, target_audience, priority, expires_at } = req.body;
+        await query("INSERT INTO announcements (title, content, target_audience, priority, expires_at) VALUES ($1,$2,$3,$4,$5)", [title, content, target_audience || 'all', priority || 'normal', expires_at || null]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { title, content, target_audience, priority, expires_at } = req.body;
+        await query("UPDATE announcements SET title=$1, content=$2, target_audience=$3, priority=$4, expires_at=$5, updated_at=NOW() WHERE id=$6", [title, content, target_audience, priority, expires_at || null, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/announcements/:id', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        await query("UPDATE announcements SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// SECTIONS API
+// ============================================
+app.get('/api/sections', isAuthenticated, async (req, res) => {
+    try {
+        const result = await query("SELECT * FROM sections ORDER BY section_name");
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// ARCHIVE API
+// ============================================
+const archiveTables = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
+
+app.get('/api/archive/:type', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const table = archiveTables[req.params.type];
+        if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
+        let sql;
+        switch (req.params.type) {
+            case 'students': sql = "SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = true ORDER BY s.archived_at DESC"; break;
+            case 'attendance': sql = "SELECT a.*, s.student_name, sec.section_name FROM attendance a JOIN students s ON a.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE a.is_archived = true ORDER BY a.archived_at DESC"; break;
+            case 'grades': sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = true ORDER BY g.archived_at DESC"; break;
+            case 'announcements': sql = "SELECT * FROM announcements WHERE is_archived = true ORDER BY archived_at DESC"; break;
+        }
+        const result = await query(sql);
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.post('/api/archive/:type/:id/restore', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const table = archiveTables[req.params.type];
+        if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
+        await query(`UPDATE ${table} SET is_archived = false, archived_at = NULL WHERE id = $1`, [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+        const table = archiveTables[req.params.type];
+        if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
+        await query(`DELETE FROM ${table} WHERE id = $1 AND is_archived = true`, [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ============================================
+// START SERVER
+// ============================================
+app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
+    console.log(`[S.M.A.R.T] URL: http://localhost:${PORT}/login.html`);
+    await initDB();
+});

@@ -110,7 +110,7 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-base);
     color: var(--text-primary);
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.6;
     transition: background-color 0.3s ease, color 0.3s ease;
     -webkit-font-smoothing: antialiased;
@@ -192,7 +192,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 .form-input, .form-select, .form-textarea {
     width: 100%; padding: 10px 14px;
     border: 1.5px solid var(--border-color); border-radius: 8px;
-    font-size: 15px; font-family: inherit;
+    font-size: 16px; font-family: inherit;
     transition: var(--transition);
     background: var(--input-bg); color: var(--text-primary);
 }
@@ -211,7 +211,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
    ============================================ */
 .btn {
     padding: 10px 20px; border: none; border-radius: 8px;
-    font-size: 15px; font-weight: 600; font-family: inherit;
+    font-size: 16px; font-weight: 600; font-family: inherit;
     cursor: pointer; transition: var(--transition); text-decoration: none;
     display: inline-flex; align-items: center; justify-content: center;
     gap: 6px; text-align: center; letter-spacing: 0.1px;
@@ -467,7 +467,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 .table { width: 100%; border-collapse: collapse; }
 
 .table th, .table td {
-    padding: 12px 16px; text-align: left;
+    padding: 12px 16px; text-align: left; font-size: 15px;
     border-bottom: 1px solid var(--border-color); font-size: 15px;
 }
 
@@ -802,3 +802,137 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 }
 .archive-type-btn:hover { border-color: var(--primary); color: var(--primary); }
 .archive-type-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.site-footer {
+    background: var(--card-bg); border-top: 1px solid var(--border-color);
+    padding: 20px 24px; margin-top: 32px; border-radius: 12px;
+    box-shadow: var(--card-shadow);
+}
+
+.footer-content {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--text-secondary);
+}
+
+.footer-left { font-weight: 500; }
+.footer-left strong { color: var(--text-primary); }
+
+.footer-right {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+}
+
+.footer-contact {
+    display: flex; align-items: center; gap: 6px; font-size: 13px;
+    color: var(--text-secondary); text-decoration: none;
+}
+.footer-contact:hover { color: var(--primary); }
+.footer-contact svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.footer-divider {
+    width: 1px; height: 16px; background: var(--border-color);
+}
+
+@media (max-width: 768px) {
+    .footer-content { flex-direction: column; text-align: center; }
+    .footer-right { justify-content: center; }
+}
+
+/* ============================================
+   ATTENDANCE TIMELINE
+   ============================================ */
+.timeline-header {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 10px; margin-bottom: 14px;
+}
+
+.live-date {
+    font-size: 20px; font-weight: 700; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+}
+
+.live-date .live-dot {
+    width: 8px; height: 8px; background: var(--success); border-radius: 50%;
+    animation: livePulse 2s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+}
+
+.date-nav {
+    display: flex; align-items: center; gap: 6px;
+}
+
+.date-nav-btn {
+    width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid var(--border-color);
+    background: var(--input-bg); cursor: pointer; display: flex;
+    align-items: center; justify-content: center; transition: var(--transition);
+    color: var(--text-secondary);
+}
+.date-nav-btn:hover { border-color: var(--primary); color: var(--primary); }
+.date-nav-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.timeline-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap: 4px; margin-bottom: 16px;
+}
+
+.timeline-day {
+    text-align: center; padding: 8px 4px; border-radius: 8px;
+    cursor: pointer; transition: var(--transition); font-size: 12px;
+    border: 1.5px solid transparent; background: var(--bg-base);
+}
+
+.timeline-day:hover { border-color: var(--primary); }
+.timeline-day.active { background: var(--primary); color: white; border-color: var(--primary); }
+.timeline-day.has-data { background: var(--badge-success-bg); border-color: var(--badge-success-border); }
+.timeline-day.active.has-data { background: var(--primary); border-color: var(--primary); color: white; }
+.timeline-day .day-num { font-weight: 600; font-size: 14px; }
+.timeline-day .day-name { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+.timeline-day.active .day-name { color: rgba(255,255,255,0.7); }
+
+.timeline-summary {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
+}
+
+.timeline-stat {
+    background: var(--bg-base); border-radius: 10px; padding: 12px;
+    text-align: center; border: 1px solid var(--border-color);
+}
+.timeline-stat .ts-value { font-size: 28px; font-weight: 700; }
+.timeline-stat .ts-label { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+.timeline-stat.present .ts-value { color: var(--success); }
+.timeline-stat.absent .ts-value { color: var(--danger); }
+.timeline-stat.excused .ts-value { color: var(--warning); }
+
+/* ============================================
+   QR CODE ATTENDANCE
+   ============================================ */
+.qr-section {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px; text-align: center;
+}
+
+.qr-display {
+    background: white; border-radius: 16px; padding: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin: 16px 0;
+    border: 2px solid var(--border-color);
+}
+
+.qr-display img {
+    width: 250px; height: 250px; display: block; border-radius: 8px;
+}
+
+.qr-timer {
+    font-size: 32px; font-weight: 700; color: var(--danger);
+    font-variant-numeric: tabular-nums; letter-spacing: 1px;
+}
+
+.qr-status {
+    font-size: 14px; color: var(--text-secondary);
+    margin-top: 4px;
+}
