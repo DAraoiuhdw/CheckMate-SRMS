@@ -6,10 +6,17 @@ const path = require('path');
 const { Pool } = require('pg');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const dns = require('dns');
 const uuidv4 = () => crypto.randomUUID();
+
+// Force IPv4 — Railway doesn't support IPv6
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust Railway's reverse proxy for secure cookies
+app.set('trust proxy', 1);
 
 // ============================================
 // MIDDLEWARE
@@ -17,25 +24,71 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'smart-srms-secret-2024',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
-}));
 
 // ============================================
-// DATABASE — PostgreSQL
+// DATABASE — PostgreSQL (Supabase Session Pooler)
 // ============================================
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:Denielmar12%23@db.jaiwhmrxyhayjeintvws.supabase.co:5432/postgres';
+// Use Session Pooler (port 6543) for IPv4 compatibility on Railway
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres.jaiwhmrxyhayjeintvws:Denielmar12%23@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres';
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('supabase') || DATABASE_URL.includes('railway') ? { rejectUnauthorized: false } : false,
+    ssl: { rejectUnauthorized: false },
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 15000
 });
+
+// ============================================
+// SESSION STORE — PostgreSQL-backed
+// ============================================
+// Create session table on startup, use pg for session persistence
+async function createSessionTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                sid VARCHAR NOT NULL PRIMARY KEY,
+                sess JSON NOT NULL,
+                expire TIMESTAMP(6) NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_expire ON user_sessions (expire);
+        `);
+    } catch (err) { /* table may already exist */ }
+}
+
+// Simple PG session store
+class PgSessionStore extends session.Store {
+    async get(sid, cb) {
+        try {
+            const r = await pool.query('SELECT sess FROM user_sessions WHERE sid = $1 AND expire > NOW()', [sid]);
+            cb(null, r.rows.length > 0 ? (typeof r.rows[0].sess === 'string' ? JSON.parse(r.rows[0].sess) : r.rows[0].sess) : null);
+        } catch (e) { cb(e); }
+    }
+    async set(sid, sess, cb) {
+        const expire = sess.cookie && sess.cookie.expires ? new Date(sess.cookie.expires) : new Date(Date.now() + 86400000);
+        try {
+            await pool.query('INSERT INTO user_sessions (sid, sess, expire) VALUES ($1, $2, $3) ON CONFLICT (sid) DO UPDATE SET sess = $2, expire = $3', [sid, JSON.stringify(sess), expire]);
+            cb && cb(null);
+        } catch (e) { cb && cb(e); }
+    }
+    async destroy(sid, cb) {
+        try { await pool.query('DELETE FROM user_sessions WHERE sid = $1', [sid]); cb && cb(null); } catch (e) { cb && cb(e); }
+    }
+}
+
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
+app.use(session({
+    store: new PgSessionStore(),
+    secret: process.env.SESSION_SECRET || 'smart-srms-secret-2024',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: isProduction,
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+    }
+}));
 
 async function initDB() {
     let client;
@@ -538,5 +591,7 @@ app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) 
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
     console.log(`[S.M.A.R.T] URL: http://localhost:${PORT}/login.html`);
+    await createSessionTable();
     await initDB();
 });
+
