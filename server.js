@@ -26,24 +26,29 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// DATABASE — PostgreSQL (Supabase Session Pooler)
+// DATABASE — Railway PostgreSQL (auto-injected DATABASE_URL)
 // ============================================
-// IMPORTANT: Set DATABASE_URL env var on Railway with your Supabase Session Pooler URL
-// Format: postgresql://postgres.[PROJECT_REF]:[PASSWORD]@[POOLER_HOST]:6543/postgres
+// Railway provides DATABASE_URL automatically when you add a PostgreSQL service
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-    console.error('[DB] ERROR: DATABASE_URL environment variable is not set!');
-    console.error('[DB] Go to Supabase Dashboard > Settings > Database > Connection string > Session Pooler');
-    console.error('[DB] Copy the connection string and set it as DATABASE_URL on Railway');
+    console.warn('[DB] WARNING: DATABASE_URL not set. Using local fallback.');
+    console.warn('[DB] On Railway: Add a PostgreSQL service and link it to this app.');
 }
 
-const pool = new Pool({
+const poolConfig = {
     connectionString: DATABASE_URL || 'postgresql://localhost:5432/smart_srms',
-    ssl: DATABASE_URL ? { rejectUnauthorized: false } : false,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000
-});
+};
+
+// Railway PostgreSQL uses internal networking (no SSL needed for internal)
+// But add SSL for external connections
+if (DATABASE_URL && (DATABASE_URL.includes('railway') || DATABASE_URL.includes('supabase'))) {
+    poolConfig.ssl = { rejectUnauthorized: false };
+}
+
+const pool = new Pool(poolConfig);
 
 // ============================================
 // SESSION STORE — PostgreSQL-backed
