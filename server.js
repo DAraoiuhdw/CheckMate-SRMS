@@ -26,33 +26,43 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// DATABASE — Supabase / Railway PostgreSQL
+// DATABASE — Supabase (Vercel) / Railway PostgreSQL
 // ============================================
-// Set DATABASE_URL as an environment variable on your hosting platform.
-// Supabase: Project Settings → Database → Connection string (URI mode)
-// Railway: Add a PostgreSQL service and link it — DATABASE_URL is auto-injected
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
-    console.error('[DB] FATAL: DATABASE_URL environment variable is not set!');
-    console.error('[DB] Supabase: Go to Project Settings → Database → Connection String (URI)');
-    console.error('[DB] Railway: Add a PostgreSQL service and link it to this app.');
-    // Don't exit — let the server start so health checks pass, but DB calls will fail gracefully
+    console.error('[DB] FATAL: DATABASE_URL is not set! Go to Vercel → Settings → Environment Variables.');
 }
+
+// Vercel is serverless — each invocation may be a new cold start.
+// Supabase Transaction pooler (port 6543) is required for serverless.
+// Session pooler (port 5432) also works but may exhaust connections.
+const isVercel = !!process.env.VERCEL;
 
 const poolConfig = {
     connectionString: DATABASE_URL,
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    // Serverless: keep pool small — each Lambda has its own pool
+    max: isVercel ? 2 : 10,
+    min: 0,
+    idleTimeoutMillis: isVercel ? 0 : 30000,
+    connectionTimeoutMillis: 20000,
+    // Allow query to fail fast rather than hang
+    allowExitOnIdle: true,
 };
 
-// Supabase and many cloud DBs require SSL
+// Always use SSL for Supabase — rejectUnauthorized:false required for self-signed certs
 if (DATABASE_URL) {
     poolConfig.ssl = { rejectUnauthorized: false };
 }
 
-const pool = DATABASE_URL ? new Pool(poolConfig) : null;
+// Log connection errors for debugging
+let pool = null;
+if (DATABASE_URL) {
+    pool = new Pool(poolConfig);
+    pool.on('error', (err) => {
+        console.error('[DB] Pool error:', err.message);
+    });
+}
 
 // ============================================
 // SESSION STORE — PostgreSQL-backed (PgSession)
@@ -116,8 +126,14 @@ app.use(session({
 // ============================================
 async function query(text, params) {
     if (!pool) throw new Error('No database connection. Set DATABASE_URL environment variable.');
-    const result = await pool.query(text, params);
-    return result;
+    try {
+        const result = await pool.query(text, params);
+        return result;
+    } catch (err) {
+        // Log the full error so it appears in Vercel Runtime Logs
+        console.error('[DB Query Error]', err.message, '| Query:', text.substring(0, 80));
+        throw err;
+    }
 }
 
 // ============================================
