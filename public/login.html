@@ -173,8 +173,8 @@
                         <input type="email" id="reg-email" class="form-input" placeholder="your@email.com" required autocomplete="email">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="reg-section">Section <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
-                        <select id="reg-section" class="form-input">
+                        <label class="form-label" for="reg-section">Section</label>
+                        <select id="reg-section" class="form-input" required>
                             <option value="">— Select your section —</option>
                         </select>
                     </div>
@@ -297,6 +297,7 @@
 
             if (password !== confirm) { showError('Passwords do not match.'); return; }
             if (password.length < 6)  { showError('Password must be at least 6 characters.'); return; }
+            if (!section)             { showError('Please select your section.'); return; }
 
             const btn = document.getElementById('registerBtn');
             btn.disabled = true;

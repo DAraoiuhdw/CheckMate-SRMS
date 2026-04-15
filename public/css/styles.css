@@ -936,3 +936,140 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
     font-size: 14px; color: var(--text-secondary);
     margin-top: 4px;
 }
+
+/* ============================================
+   RESPONSIVE — FULL BREAKPOINT SYSTEM
+   ============================================ */
+
+/* Tablet landscape — squeeze sidebar */
+@media (max-width: 1100px) {
+    .sidebar { width: 200px; }
+    .main-content { margin-left: 200px; }
+}
+
+/* Tablet portrait */
+@media (max-width: 1024px) {
+    .sidebar { width: 68px; padding: 12px 0; overflow: visible; }
+    .sidebar-logo-text,
+    .sidebar-nav-link span:not(.sidebar-nav-icon),
+    .sidebar-user-card,
+    .sidebar-footer .btn { display: none; }
+    .sidebar-nav-link { justify-content: center; padding: 12px 0; border-left: none; }
+    .sidebar-nav-link.active, .sidebar-nav-link:hover { border-left: none; border-radius: 10px; margin: 0 6px; }
+    .sidebar-nav-icon { width: 24px; height: 24px; }
+    .sidebar-header { padding: 0 0 12px; display: flex; justify-content: center; }
+    .sidebar-footer { padding: 8px; }
+    .main-content { margin-left: 68px; padding: 16px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile — full slide-over sidebar */
+@media (max-width: 768px) {
+    /* Sidebar becomes an overlay drawer */
+    .mobile-menu-btn { display: flex; }
+    .sidebar {
+        width: 220px; transform: translateX(-100%);
+        box-shadow: none; z-index: 1200;
+        padding: 16px 0;
+    }
+    .sidebar-logo-text,
+    .sidebar-nav-link span:not(.sidebar-nav-icon),
+    .sidebar-user-card,
+    .sidebar-footer .btn { display: block; }
+    .sidebar-nav-link { justify-content: flex-start; padding: 10px 16px; border-left: 3px solid transparent; }
+    .sidebar-header { padding: 0 16px 16px; justify-content: flex-start; }
+    .sidebar.active {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0,0,0,0.2);
+    }
+    /* Backdrop overlay when sidebar open */
+    .sidebar-backdrop {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.45); z-index: 1100;
+    }
+    .sidebar-backdrop.active { display: block; }
+
+    /* Main content fills full width */
+    .main-content { margin-left: 0; padding: 64px 12px 16px; }
+
+    /* Header */
+    .header { flex-direction: column; gap: 10px; text-align: center; padding: 14px; }
+    .header-title { font-size: 18px; }
+    .header-subtitle { font-size: 13px; }
+    .header-actions { flex-wrap: wrap; justify-content: center; gap: 6px; }
+    .header-actions .btn { font-size: 13px; padding: 7px 12px; }
+
+    /* Stats */
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .stat-value { font-size: 26px; }
+
+    /* Tables — make horizontally scrollable */
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table th, .table td { padding: 10px 10px; font-size: 13px; white-space: nowrap; }
+
+    /* Modals */
+    .modal-content { padding: 18px 16px; margin: 10px; max-height: 90vh; }
+    .modal-title { font-size: 17px; }
+
+    /* Attendance */
+    .attendance-buttons { flex-wrap: wrap; gap: 6px; }
+    .attendance-btn { font-size: 13px; padding: 7px; }
+
+    /* Search */
+    .search-bar { flex-direction: column; }
+
+    /* Archive */
+    .archive-filter-bar { gap: 6px; }
+
+    /* Timeline */
+    .timeline-summary { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .timeline-stat .ts-value { font-size: 22px; }
+    .timeline-grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 3px; }
+
+    /* QR */
+    .qr-display img { width: 200px; height: 200px; }
+    .qr-timer { font-size: 26px; }
+
+    /* Login */
+    .login-card { padding: 26px 18px; }
+    .app-title { font-size: 24px; }
+
+    /* Footer */
+    .footer-content { flex-direction: column; text-align: center; }
+    .footer-right { justify-content: center; }
+
+    /* NFC */
+    .nfc-scan-area { width: 160px; height: 160px; }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+    .main-content { padding: 58px 10px 14px; }
+    .card { padding: 14px; border-radius: 10px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-card { padding: 14px; }
+    .stat-value { font-size: 22px; }
+    .stat-label { font-size: 12px; }
+    .btn { font-size: 13px; padding: 8px 12px; }
+    .header-title { font-size: 16px; }
+    .login-card { padding: 20px 14px; margin: 6px; }
+    .app-title { font-size: 22px; }
+    .modal-content { padding: 14px; margin: 6px; }
+    .table th, .table td { padding: 8px 8px; font-size: 12px; }
+    .timeline-summary { gap: 6px; }
+    .timeline-stat .ts-value { font-size: 20px; }
+    .qr-display img { width: 180px; height: 180px; }
+    .announcement-title { font-size: 15px; }
+    .announcement-content { font-size: 13px; }
+    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { white-space: nowrap; font-size: 13px; padding: 7px 12px; }
+    .badge { font-size: 10px; padding: 3px 6px; }
+}
+
+/* Very small (iPhone SE, Galaxy A) */
+@media (max-width: 360px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .login-card { padding: 18px 12px; }
+    .table th, .table td { padding: 7px 6px; font-size: 11px; }
+    .btn-sm { font-size: 11px; padding: 5px 8px; }
+}

@@ -179,18 +179,40 @@ function setupEventListeners() {
         });
     }
     document.querySelectorAll('#logoutBtn').forEach(btn => btn.addEventListener('click', logout));
+
+    // Mobile sidebar with backdrop
     const mobileBtn = document.querySelector('.mobile-menu-btn');
     if (mobileBtn) {
+        let backdrop = document.querySelector('.sidebar-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'sidebar-backdrop';
+            document.body.appendChild(backdrop);
+        }
+        const sidebar = document.querySelector('.sidebar');
+        function openSidebar() {
+            if (sidebar) sidebar.classList.add('active');
+            backdrop.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeSidebar() {
+            if (sidebar) sidebar.classList.remove('active');
+            backdrop.classList.remove('active');
+            document.body.style.overflow = '';
+        }
         mobileBtn.addEventListener('click', () => {
-            const sidebar = document.querySelector('.sidebar');
-            if (sidebar) sidebar.classList.toggle('active');
+            sidebar && sidebar.classList.contains('active') ? closeSidebar() : openSidebar();
         });
+        backdrop.addEventListener('click', closeSidebar);
     }
     document.querySelectorAll('.sidebar-nav-link').forEach(link => {
         link.addEventListener('click', () => {
             if (window.innerWidth <= 768) {
                 const sidebar = document.querySelector('.sidebar');
+                const backdrop = document.querySelector('.sidebar-backdrop');
                 if (sidebar) sidebar.classList.remove('active');
+                if (backdrop) backdrop.classList.remove('active');
+                document.body.style.overflow = '';
             }
         });
     });

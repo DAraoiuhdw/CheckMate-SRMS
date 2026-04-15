@@ -347,6 +347,9 @@ app.post('/api/auth/register', async (req, res) => {
         if (password.length < 6) {
             return res.json({ success: false, message: 'Password must be at least 6 characters.' });
         }
+        if (!section_id || section_id === '') {
+            return res.json({ success: false, message: 'Please select your section.' });
+        }
 
         // Check if email already exists
         const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -601,10 +604,20 @@ app.post('/attend/:token', async (req, res) => {
 
         // Find the student record linked to this user account
         // First try by email, then fall back to matching by name (in case email wasn't set on student record)
-        let studentResult = await query("SELECT * FROM students WHERE email = $1 AND is_archived = false", [user.email]);
+        let studentResult = await query(
+            `SELECT s.*, sec.section_name FROM students s
+             LEFT JOIN sections sec ON s.section_id = sec.id
+             WHERE s.email = $1 AND s.is_archived = false`,
+            [user.email]
+        );
         if (studentResult.rows.length === 0) {
             // Fallback: match by user's full name
-            studentResult = await query("SELECT * FROM students WHERE LOWER(student_name) = LOWER($1) AND is_archived = false", [user.name]);
+            studentResult = await query(
+                `SELECT s.*, sec.section_name FROM students s
+                 LEFT JOIN sections sec ON s.section_id = sec.id
+                 WHERE LOWER(s.student_name) = LOWER($1) AND s.is_archived = false`,
+                [user.name]
+            );
         }
         if (studentResult.rows.length === 0) {
             return res.send(qrResultPage('Account Not Linked', `Your account (${user.email}) is not linked to a student record. Please contact your teacher to link your account.`, 'error'));
@@ -624,9 +637,11 @@ app.post('/attend/:token', async (req, res) => {
         // Mark QR token as used (one-time)
         await query("UPDATE qr_tokens SET used = true, used_at = NOW(), used_by_student_id = $1 WHERE token = $2", [student.id, req.params.token]);
 
+        const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const sectionStr = student.section_name ? `<br><strong>Section:</strong> ${student.section_name}` : '';
         res.send(qrResultPage(
             'Attendance Recorded!',
-            `Welcome, ${student.student_name}! You have been marked as Present for today (${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}).`,
+            `Welcome, <strong>${student.student_name}</strong>!<br>You have been marked as <strong>Present</strong> for today.<br><strong>Date:</strong> ${dateStr}${sectionStr}`,
             'success'
         ));
     } catch (err) {
@@ -944,8 +959,13 @@ app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) 
 // ============================================
 // HEALTH CHECK — Vercel / Railway / Render
 // ============================================
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', db: pool ? 'configured' : 'not configured', ts: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    try {
+        await query('SELECT 1');
+        res.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() });
+    } catch (err) {
+        res.status(503).json({ status: 'error', db: 'disconnected', error: err.message, ts: new Date().toISOString() });
+    }
 });
 
 // ============================================
