@@ -3,56 +3,204 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Login to S.M.A.R.T — Student Management And Record Tracking system.">
+    <meta name="description" content="Login or create a student account on S.M.A.R.T — Student Management And Record Tracking system.">
     <title>Login - S.M.A.R.T</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        /* --- Tab toggle --- */
+        .auth-tabs {
+            display: flex;
+            background: var(--bg-base);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+        }
+        .auth-tab {
+            flex: 1;
+            padding: 9px 0;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        .auth-tab.active {
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.35);
+        }
+
+        /* --- Form panels --- */
+        .auth-panel { display: none; }
+        .auth-panel.active { display: block; }
+
+        /* --- Animated slide --- */
+        .auth-panel.active { animation: slideIn 0.22s ease; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- Password strength bar --- */
+        .pw-strength {
+            height: 3px;
+            border-radius: 3px;
+            margin-top: 6px;
+            background: var(--border-color);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .pw-strength-bar {
+            height: 100%;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s, background 0.3s;
+        }
+        .pw-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* --- Success flash --- */
+        .auth-success {
+            display: none;
+            padding: 10px 14px;
+            background: rgba(16,185,129,0.12);
+            border: 1px solid rgba(16,185,129,0.35);
+            border-radius: 8px;
+            color: #10b981;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 14px;
+            text-align: center;
+        }
+        .auth-error {
+            display: none;
+            padding: 10px 14px;
+            background: rgba(239,68,68,0.10);
+            border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 8px;
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 14px;
+            text-align: center;
+        }
+
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 420px) { .form-row { grid-template-columns: 1fr; } }
+
+        .login-card { max-width: 430px; }
+    </style>
 </head>
 <body>
     <div class="wallpaper-bg"></div>
     <div class="wallpaper-overlay"></div>
-    
+
     <div class="login-container">
         <div class="login-card fade-in">
             <button class="dark-mode-toggle" id="login-theme-toggle">
                 <span class="toggle-icon"></span>
             </button>
-            
+
             <div class="logo-container">
                 <div class="logo">SM</div>
                 <h1 class="app-title">S.M.A.R.T</h1>
                 <p class="app-subtitle">Student Management And Record Tracking</p>
             </div>
-            
-            <form id="loginForm">
-                <div class="form-group">
-                    <label class="form-label" for="email">Email Address</label>
-                    <input type="email" id="email" class="form-input" placeholder="Enter your email" required autocomplete="email">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="password">Password</label>
-                    <input type="password" id="password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
-                </div>
-                <button type="submit" class="btn btn-primary">Sign In</button>
-            </form>
-            
-            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-color);">
-                <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;font-weight:600;">Demo Accounts:</p>
-                <div style="display:grid;gap:6px;font-size:12px;color:var(--text-secondary);">
-                    <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
-                        <strong style="color:var(--danger);">Admin:</strong> admin@smart-srms.com / admin123
-                    </div>
-                    <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
-                        <strong style="color:var(--primary);">Teacher:</strong> teacher@smart-srms.com / teacher123
-                    </div>
-                    <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
-                        <strong style="color:var(--success);">Student:</strong> john.smith@email.com / student123
-                    </div>
-                </div>
+
+            <!-- Tab switcher -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tab-signin" onclick="switchTab('signin')">Sign In</button>
+                <button class="auth-tab" id="tab-register" onclick="switchTab('register')">Create Account</button>
             </div>
-            
+
+            <!-- Alert banners -->
+            <div class="auth-success" id="authSuccess"></div>
+            <div class="auth-error" id="authError"></div>
+
+            <!-- ===== SIGN IN PANEL ===== -->
+            <div class="auth-panel active" id="panel-signin">
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email Address</label>
+                        <input type="email" id="email" class="form-input" placeholder="Enter your email" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="password">Password</label>
+                        <input type="password" id="password" class="form-input" placeholder="Enter your password" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="signinBtn">Sign In</button>
+                </form>
+
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);">
+                    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;font-weight:600;">Demo Accounts:</p>
+                    <div style="display:grid;gap:6px;font-size:12px;color:var(--text-secondary);">
+                        <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
+                            <strong style="color:var(--danger);">Admin:</strong> admin@smart-srms.com / admin123
+                        </div>
+                        <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
+                            <strong style="color:var(--primary);">Teacher:</strong> teacher@smart-srms.com / teacher123
+                        </div>
+                        <div style="padding:8px 10px;background:var(--bg-base);border-radius:8px;border:1px solid var(--border-color);">
+                            <strong style="color:var(--success);">Student:</strong> john.smith@email.com / student123
+                        </div>
+                    </div>
+                </div>
+
+                <p style="margin-top:14px;text-align:center;font-size:13px;color:var(--text-secondary);">
+                    New student? <a href="#" onclick="switchTab('register');return false;" style="color:var(--primary);font-weight:600;text-decoration:none;">Create an account →</a>
+                </p>
+            </div>
+
+            <!-- ===== REGISTER PANEL ===== -->
+            <div class="auth-panel" id="panel-register">
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label class="form-label" for="reg-name">Full Name</label>
+                        <input type="text" id="reg-name" class="form-input" placeholder="e.g. Juan dela Cruz" required autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-email">Email Address</label>
+                        <input type="email" id="reg-email" class="form-input" placeholder="your@email.com" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-section">Section <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                        <select id="reg-section" class="form-input">
+                            <option value="">— Select your section —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-password">Password</label>
+                        <input type="password" id="reg-password" class="form-input" placeholder="Min. 6 characters" required autocomplete="new-password" oninput="checkPasswordStrength(this.value)">
+                        <div class="pw-strength"><div class="pw-strength-bar" id="pwBar"></div></div>
+                        <p class="pw-hint" id="pwHint">Enter a password (min. 6 characters)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-confirm">Confirm Password</label>
+                        <input type="password" id="reg-confirm" class="form-input" placeholder="Re-enter your password" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="registerBtn">Create Student Account</button>
+                </form>
+
+                <p style="margin-top:14px;text-align:center;font-size:13px;color:var(--text-secondary);">
+                    Already have an account? <a href="#" onclick="switchTab('signin');return false;" style="color:var(--primary);font-weight:600;text-decoration:none;">Sign in →</a>
+                </p>
+
+                <p style="margin-top:12px;font-size:11px;color:var(--text-muted);text-align:center;line-height:1.5;">
+                    Creating an account registers you as a <strong>Student</strong> in S.M.A.R.T.<br>
+                    Teachers and admins are added by the system administrator.
+                </p>
+            </div>
+
             <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border-color);">
                 <p style="color:var(--text-muted);font-size:11px;text-align:center;">
                     S.M.A.R.T &mdash; &copy; 2024 All Rights Reserved<br>
@@ -62,7 +210,120 @@
             </div>
         </div>
     </div>
-    
+
     <script src="/js/script.js"></script>
+    <script>
+        // ─── Tab switching ───────────────────────────────
+        function switchTab(tab) {
+            document.getElementById('panel-signin').classList.toggle('active', tab === 'signin');
+            document.getElementById('panel-register').classList.toggle('active', tab === 'register');
+            document.getElementById('tab-signin').classList.toggle('active', tab === 'signin');
+            document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+            clearAlerts();
+            // Load sections when switching to register
+            if (tab === 'register') loadSections();
+        }
+
+        function showSuccess(msg) {
+            const el = document.getElementById('authSuccess');
+            el.textContent = '✓ ' + msg;
+            el.style.display = 'block';
+            document.getElementById('authError').style.display = 'none';
+        }
+        function showError(msg) {
+            const el = document.getElementById('authError');
+            el.textContent = '✕ ' + msg;
+            el.style.display = 'block';
+            document.getElementById('authSuccess').style.display = 'none';
+        }
+        function clearAlerts() {
+            document.getElementById('authSuccess').style.display = 'none';
+            document.getElementById('authError').style.display = 'none';
+        }
+
+        // ─── Load sections for dropdown ──────────────────
+        async function loadSections() {
+            const sel = document.getElementById('reg-section');
+            if (sel.options.length > 1) return; // already loaded
+            try {
+                const res = await fetch('/api/sections');
+                const data = await res.json();
+                if (data.success) {
+                    data.data.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.section_name;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* sections are optional */ }
+        }
+
+        // ─── Password strength meter ─────────────────────
+        function checkPasswordStrength(val) {
+            const bar = document.getElementById('pwBar');
+            const hint = document.getElementById('pwHint');
+            let score = 0;
+            if (val.length >= 6)  score++;
+            if (val.length >= 10) score++;
+            if (/[A-Z]/.test(val)) score++;
+            if (/[0-9]/.test(val)) score++;
+            if (/[^A-Za-z0-9]/.test(val)) score++;
+
+            const levels = [
+                { w: '0%',   color: '#e5e7eb', label: 'Enter a password (min. 6 characters)' },
+                { w: '25%',  color: '#ef4444', label: 'Weak' },
+                { w: '50%',  color: '#f59e0b', label: 'Fair' },
+                { w: '75%',  color: '#3b82f6', label: 'Good' },
+                { w: '100%', color: '#10b981', label: 'Strong ✓' },
+            ];
+            const lvl = levels[Math.min(score, 4)];
+            bar.style.width = lvl.w;
+            bar.style.background = lvl.color;
+            hint.textContent = lvl.label;
+            hint.style.color = score > 0 ? lvl.color : '';
+        }
+
+        // ─── Register form submit ────────────────────────
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            clearAlerts();
+
+            const name     = document.getElementById('reg-name').value.trim();
+            const email    = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const confirm  = document.getElementById('reg-confirm').value;
+            const section  = document.getElementById('reg-section').value;
+
+            if (password !== confirm) { showError('Passwords do not match.'); return; }
+            if (password.length < 6)  { showError('Password must be at least 6 characters.'); return; }
+
+            const btn = document.getElementById('registerBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creating account…';
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password, section_id: section })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showSuccess('Account created! Redirecting to your dashboard…');
+                    setTimeout(() => { window.location.href = '/announcements.html'; }, 1200);
+                } else {
+                    showError(data.message || 'Registration failed. Please try again.');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Student Account';
+                }
+            } catch (err) {
+                showError('Connection error. Please try again.');
+                btn.disabled = false;
+                btn.textContent = 'Create Student Account';
+            }
+        });
+    </script>
 </body>
 </html>

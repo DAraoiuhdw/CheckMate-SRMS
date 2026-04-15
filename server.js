@@ -336,6 +336,48 @@ app.post('/api/auth/logout', (req, res) => {
     req.session.destroy(() => res.json({ success: true }));
 });
 
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { name, email, password, section_id } = req.body;
+
+        // Basic validation
+        if (!name || !email || !password) {
+            return res.json({ success: false, message: 'Name, email, and password are required.' });
+        }
+        if (password.length < 6) {
+            return res.json({ success: false, message: 'Password must be at least 6 characters.' });
+        }
+
+        // Check if email already exists
+        const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+        if (existing.rows.length > 0) {
+            return res.json({ success: false, message: 'An account with this email already exists.' });
+        }
+
+        // Create user account (role: student)
+        const userResult = await query(
+            'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+            [name.trim(), email.toLowerCase().trim(), password, 'student']
+        );
+        const user = userResult.rows[0];
+
+        // Create linked student record (auto-link by email for QR attendance)
+        const sid = section_id && section_id !== '' ? parseInt(section_id) : null;
+        await query(
+            'INSERT INTO students (student_name, email, section_id) VALUES ($1, $2, $3)',
+            [name.trim(), email.toLowerCase().trim(), sid]
+        );
+
+        // Auto-login: create session
+        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
+        res.json({ success: true, user: req.session.user, message: 'Account created successfully!' });
+
+    } catch (err) {
+        console.error('[Register error]', err.message);
+        res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+    }
+});
+
 // ============================================
 // DASHBOARD API
 // ============================================
@@ -853,7 +895,7 @@ app.delete('/api/announcements/:id', isAuthenticated, isAdmin, async (req, res) 
 // ============================================
 // SECTIONS API
 // ============================================
-app.get('/api/sections', isAuthenticated, async (req, res) => {
+app.get('/api/sections', async (req, res) => {
     try {
         const result = await query("SELECT * FROM sections ORDER BY section_name");
         res.json({ success: true, data: result.rows });
