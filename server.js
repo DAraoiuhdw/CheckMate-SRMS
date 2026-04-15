@@ -558,11 +558,20 @@ app.post('/attend/:token', async (req, res) => {
         const user = userResult.rows[0];
 
         // Find the student record linked to this user account
-        const studentResult = await query("SELECT * FROM students WHERE email = $1 AND is_archived = false", [user.email]);
+        // First try by email, then fall back to matching by name (in case email wasn't set on student record)
+        let studentResult = await query("SELECT * FROM students WHERE email = $1 AND is_archived = false", [user.email]);
         if (studentResult.rows.length === 0) {
-            return res.send(qrResultPage('Account Not Linked', 'Your account is not linked to a student record. Please contact your teacher.', 'error'));
+            // Fallback: match by user's full name
+            studentResult = await query("SELECT * FROM students WHERE LOWER(student_name) = LOWER($1) AND is_archived = false", [user.name]);
+        }
+        if (studentResult.rows.length === 0) {
+            return res.send(qrResultPage('Account Not Linked', `Your account (${user.email}) is not linked to a student record. Please contact your teacher to link your account.`, 'error'));
         }
         const student = studentResult.rows[0];
+        // Auto-link: save email to student record if not already set
+        if (!student.email) {
+            await query("UPDATE students SET email = $1 WHERE id = $2", [user.email, student.id]);
+        }
 
         // Mark attendance as Present
         await query(
