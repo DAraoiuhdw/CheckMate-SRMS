@@ -9,13 +9,13 @@ const crypto = require('crypto');
 const dns = require('dns');
 const uuidv4 = () => crypto.randomUUID();
 
-// Force IPv4 — Railway doesn't support IPv6
+// Force IPv4 — Railway/Supabase prefer IPv4
 dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust Railway's reverse proxy for secure cookies
+// Trust Railway/Render reverse proxy for secure cookies
 app.set('trust proxy', 1);
 
 // ============================================
@@ -26,35 +26,39 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ============================================
-// DATABASE — Railway PostgreSQL (auto-injected DATABASE_URL)
+// DATABASE — Supabase / Railway PostgreSQL
 // ============================================
-// Railway provides DATABASE_URL automatically when you add a PostgreSQL service
+// Set DATABASE_URL as an environment variable on your hosting platform.
+// Supabase: Project Settings → Database → Connection string (URI mode)
+// Railway: Add a PostgreSQL service and link it — DATABASE_URL is auto-injected
 const DATABASE_URL = process.env.DATABASE_URL;
+
 if (!DATABASE_URL) {
-    console.warn('[DB] WARNING: DATABASE_URL not set. Using local fallback.');
-    console.warn('[DB] On Railway: Add a PostgreSQL service and link it to this app.');
+    console.error('[DB] FATAL: DATABASE_URL environment variable is not set!');
+    console.error('[DB] Supabase: Go to Project Settings → Database → Connection String (URI)');
+    console.error('[DB] Railway: Add a PostgreSQL service and link it to this app.');
+    // Don't exit — let the server start so health checks pass, but DB calls will fail gracefully
 }
 
 const poolConfig = {
-    connectionString: DATABASE_URL || 'postgresql://localhost:5432/smart_srms',
+    connectionString: DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000
+    connectionTimeoutMillis: 15000,
 };
 
-// Railway PostgreSQL uses internal networking (no SSL needed for internal)
-// But add SSL for external connections
-if (DATABASE_URL && (DATABASE_URL.includes('railway') || DATABASE_URL.includes('supabase'))) {
+// Supabase and many cloud DBs require SSL
+if (DATABASE_URL) {
     poolConfig.ssl = { rejectUnauthorized: false };
 }
 
-const pool = new Pool(poolConfig);
+const pool = DATABASE_URL ? new Pool(poolConfig) : null;
 
 // ============================================
-// SESSION STORE — PostgreSQL-backed
+// SESSION STORE — PostgreSQL-backed (PgSession)
 // ============================================
-// Create session table on startup, use pg for session persistence
 async function createSessionTable() {
+    if (!pool) return;
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS user_sessions (
@@ -67,30 +71,36 @@ async function createSessionTable() {
     } catch (err) { /* table may already exist */ }
 }
 
-// Simple PG session store
+// Simple in-memory + PG session store
 class PgSessionStore extends session.Store {
     async get(sid, cb) {
+        if (!pool) return cb(null, null);
         try {
             const r = await pool.query('SELECT sess FROM user_sessions WHERE sid = $1 AND expire > NOW()', [sid]);
             cb(null, r.rows.length > 0 ? (typeof r.rows[0].sess === 'string' ? JSON.parse(r.rows[0].sess) : r.rows[0].sess) : null);
         } catch (e) { cb(e); }
     }
     async set(sid, sess, cb) {
+        if (!pool) return cb && cb(null);
         const expire = sess.cookie && sess.cookie.expires ? new Date(sess.cookie.expires) : new Date(Date.now() + 86400000);
         try {
-            await pool.query('INSERT INTO user_sessions (sid, sess, expire) VALUES ($1, $2, $3) ON CONFLICT (sid) DO UPDATE SET sess = $2, expire = $3', [sid, JSON.stringify(sess), expire]);
+            await pool.query(
+                'INSERT INTO user_sessions (sid, sess, expire) VALUES ($1, $2, $3) ON CONFLICT (sid) DO UPDATE SET sess = $2, expire = $3',
+                [sid, JSON.stringify(sess), expire]
+            );
             cb && cb(null);
         } catch (e) { cb && cb(e); }
     }
     async destroy(sid, cb) {
+        if (!pool) return cb && cb(null);
         try { await pool.query('DELETE FROM user_sessions WHERE sid = $1', [sid]); cb && cb(null); } catch (e) { cb && cb(e); }
     }
 }
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RENDER;
 app.use(session({
     store: new PgSessionStore(),
-    secret: process.env.SESSION_SECRET || 'smart-srms-secret-2024',
+    secret: process.env.SESSION_SECRET || 'smart-srms-secret-change-in-prod',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -101,7 +111,23 @@ app.use(session({
     }
 }));
 
+// ============================================
+// DB QUERY HELPER — graceful no-DB handling
+// ============================================
+async function query(text, params) {
+    if (!pool) throw new Error('No database connection. Set DATABASE_URL environment variable.');
+    const result = await pool.query(text, params);
+    return result;
+}
+
+// ============================================
+// DB INIT & MIGRATIONS
+// ============================================
 async function initDB() {
+    if (!pool) {
+        console.error('[DB] Skipping DB init — no DATABASE_URL set.');
+        return false;
+    }
     let client;
     for (let i = 1; i <= 5; i++) {
         try {
@@ -112,68 +138,110 @@ async function initDB() {
             return true;
         } catch (err) {
             console.log(`[DB] Attempt ${i}/5 failed: ${err.message}`);
-            if (client) client.release();
+            if (client) { client.release(); client = null; }
             if (i < 5) await new Promise(r => setTimeout(r, i * 3000));
         }
     }
-    console.log('[DB] All connection attempts failed');
+    console.log('[DB] All connection attempts failed. Check DATABASE_URL.');
     return false;
 }
 
 async function runMigrations(client) {
-    // Create tables
+    // Core tables
     await client.query(`
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(100) NOT NULL UNIQUE,
-            password VARCHAR(100) NOT NULL, role VARCHAR(50) DEFAULT 'teacher', created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            password VARCHAR(100) NOT NULL,
+            role VARCHAR(50) DEFAULT 'teacher',
+            created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS sections (
-            id SERIAL PRIMARY KEY, section_name VARCHAR(50) NOT NULL UNIQUE, created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            section_name VARCHAR(50) NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS students (
-            id SERIAL PRIMARY KEY, student_name VARCHAR(100) NOT NULL, section_id INT REFERENCES sections(id) ON DELETE SET NULL,
-            email VARCHAR(100), phone VARCHAR(20), address TEXT, date_of_birth DATE, gender VARCHAR(10),
-            enrollment_date DATE DEFAULT CURRENT_DATE, nfc_tag_id VARCHAR(100) DEFAULT NULL UNIQUE,
-            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            student_name VARCHAR(100) NOT NULL,
+            section_id INT REFERENCES sections(id) ON DELETE SET NULL,
+            email VARCHAR(100),
+            phone VARCHAR(20),
+            address TEXT,
+            date_of_birth DATE,
+            gender VARCHAR(10),
+            enrollment_date DATE DEFAULT CURRENT_DATE,
+            nfc_tag_id VARCHAR(100) DEFAULT NULL UNIQUE,
+            is_archived BOOLEAN DEFAULT FALSE,
+            archived_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS attendance (
-            id SERIAL PRIMARY KEY, student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-            date DATE NOT NULL, status VARCHAR(20) NOT NULL, remarks TEXT,
-            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW(),
+            id SERIAL PRIMARY KEY,
+            student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            status VARCHAR(20) NOT NULL,
+            remarks TEXT,
+            is_archived BOOLEAN DEFAULT FALSE,
+            archived_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
             UNIQUE(student_id, date)
         );
         CREATE TABLE IF NOT EXISTS grades (
-            id SERIAL PRIMARY KEY, student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-            subject VARCHAR(50) NOT NULL, grade VARCHAR(10) NOT NULL, score DECIMAL(5,2), max_score DECIMAL(5,2),
-            semester VARCHAR(20), academic_year VARCHAR(20),
-            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            subject VARCHAR(50) NOT NULL,
+            grade VARCHAR(10) NOT NULL,
+            score DECIMAL(5,2),
+            max_score DECIMAL(5,2),
+            semester VARCHAR(20),
+            academic_year VARCHAR(20),
+            is_archived BOOLEAN DEFAULT FALSE,
+            archived_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS announcements (
-            id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT NOT NULL,
-            target_audience VARCHAR(50) DEFAULT 'all', priority VARCHAR(20) DEFAULT 'normal', expires_at DATE,
-            is_archived BOOLEAN DEFAULT FALSE, archived_at TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            content TEXT NOT NULL,
+            target_audience VARCHAR(50) DEFAULT 'all',
+            priority VARCHAR(20) DEFAULT 'normal',
+            expires_at DATE,
+            is_archived BOOLEAN DEFAULT FALSE,
+            archived_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS qr_tokens (
-            id SERIAL PRIMARY KEY, token VARCHAR(100) NOT NULL UNIQUE, date DATE NOT NULL DEFAULT CURRENT_DATE,
-            created_by INT REFERENCES users(id), used BOOLEAN DEFAULT FALSE, used_at TIMESTAMP NULL,
-            expires_at TIMESTAMP NOT NULL, created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY,
+            token VARCHAR(100) NOT NULL UNIQUE,
+            date DATE NOT NULL DEFAULT CURRENT_DATE,
+            created_by INT REFERENCES users(id),
+            used BOOLEAN DEFAULT FALSE,
+            used_at TIMESTAMP NULL,
+            used_by_student_id INT REFERENCES students(id) NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
         );
     `);
 
     // Seed default data
-    await client.query(`INSERT INTO users (name, email, password, role) VALUES ('System Administrator','admin@smart-srms.com','admin123','admin'),('Demo Teacher','teacher@smart-srms.com','teacher123','teacher'),('John Michael Smith','john.smith@email.com','student123','student') ON CONFLICT (email) DO NOTHING`);
-    await client.query(`INSERT INTO sections (section_name) VALUES ('ICT-21'),('ICT-22'),('HMS-21'),('HMS-22'),('ABM-21'),('ABM-22'),('STM-21'),('STM-22'),('STM-23'),('STM-24'),('CUT-21'),('CUT-22') ON CONFLICT (section_name) DO NOTHING`);
+    await client.query(`
+        INSERT INTO users (name, email, password, role) VALUES
+            ('System Administrator', 'admin@smart-srms.com', 'admin123', 'admin'),
+            ('Demo Teacher', 'teacher@smart-srms.com', 'teacher123', 'teacher'),
+            ('John Michael Smith', 'john.smith@email.com', 'student123', 'student')
+        ON CONFLICT (email) DO NOTHING
+    `);
+    await client.query(`
+        INSERT INTO sections (section_name) VALUES
+            ('ICT-21'),('ICT-22'),('HMS-21'),('HMS-22'),('ABM-21'),('ABM-22'),
+            ('STM-21'),('STM-22'),('STM-23'),('STM-24'),('CUT-21'),('CUT-22')
+        ON CONFLICT (section_name) DO NOTHING
+    `);
 
     console.log('[DB] Migrations complete');
-}
-
-// ============================================
-// HELPER: Query wrapper
-// ============================================
-async function query(text, params) {
-    const result = await pool.query(text, params);
-    return result;
 }
 
 // ============================================
@@ -216,8 +284,7 @@ app.get(['/students.html', '/attendance.html', '/nfc-attendance.html', '/archive
     next();
 });
 
-// After login, redirect to announcements instead of dashboard
-app.get(['/dashboard.html'], (req, res, next) => {
+app.get(['/dashboard.html', '/announcements.html', '/grades.html'], (req, res, next) => {
     if (!req.session?.user) return res.redirect('/login.html');
     next();
 });
@@ -228,13 +295,20 @@ app.get(['/dashboard.html'], (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+        if (!email || !password) return res.json({ success: false, message: 'Email and password are required' });
+
         const result = await query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.json({ success: false, message: 'Invalid credentials' });
+
         const user = result.rows[0];
         if (user.password !== password) return res.json({ success: false, message: 'Invalid credentials' });
+
         req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
         res.json({ success: true, user: req.session.user });
-    } catch (err) { console.error('Login error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ success: false, message: 'Server error. Database may be unavailable.' });
+    }
 });
 
 app.get('/api/auth/status', (req, res) => {
@@ -256,7 +330,9 @@ app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
         if (role === 'student') {
             const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
             const studentId = studentResult.rows[0]?.id;
-            const gradesResult = studentId ? await query("SELECT COUNT(*) as count FROM grades WHERE student_id = $1 AND is_archived = false", [studentId]) : { rows: [{ count: 0 }] };
+            const gradesResult = studentId
+                ? await query("SELECT COUNT(*) as count FROM grades WHERE student_id = $1 AND is_archived = false", [studentId])
+                : { rows: [{ count: 0 }] };
             const annResult = await query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false");
             stats = { totalGrades: parseInt(gradesResult.rows[0].count), activeAnnouncements: parseInt(annResult.rows[0].count) };
         } else {
@@ -270,8 +346,10 @@ app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
             const attendanceStats = { present: 0, absent: 0, excused: 0 };
             attStats.rows.forEach(r => { attendanceStats[r.status.toLowerCase()] = parseInt(r.count); });
             stats = {
-                totalStudents: parseInt(students.rows[0].count), todayAttendance: parseInt(attendance.rows[0].count),
-                totalGrades: parseInt(grades.rows[0].count), activeAnnouncements: parseInt(announcements.rows[0].count),
+                totalStudents: parseInt(students.rows[0].count),
+                todayAttendance: parseInt(attendance.rows[0].count),
+                totalGrades: parseInt(grades.rows[0].count),
+                activeAnnouncements: parseInt(announcements.rows[0].count),
                 attendanceStats
             };
         }
@@ -297,10 +375,19 @@ app.get('/api/students/search/:q', isAuthenticated, isTeacherOrAdmin, async (req
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
+// Public student list for QR scan page — no auth required, returns only name + id
+app.get('/api/students/list-for-qr', async (req, res) => {
+    try {
+        const result = await query("SELECT s.id, s.student_name, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false ORDER BY s.student_name");
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
 app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
-        await query("INSERT INTO students (student_name, section_id, email, phone, address, date_of_birth, gender) VALUES ($1,$2,$3,$4,$5,$6,$7)", [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null]);
+        await query("INSERT INTO students (student_name, section_id, email, phone, address, date_of_birth, gender) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -308,7 +395,8 @@ app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) =>
 app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
-        await query("UPDATE students SET student_name=$1, section_id=$2, email=$3, phone=$4, address=$5, date_of_birth=$6, gender=$7 WHERE id=$8", [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null, req.params.id]);
+        await query("UPDATE students SET student_name=$1, section_id=$2, email=$3, phone=$4, address=$5, date_of_birth=$6, gender=$7 WHERE id=$8",
+            [student_name, section_id || null, email || null, phone || null, address || null, date_of_birth || null, gender || null, req.params.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -336,7 +424,7 @@ app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req,
 });
 
 // ============================================
-// ATTENDANCE API — Timeline
+// ATTENDANCE API
 // ============================================
 app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
@@ -353,16 +441,15 @@ app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) =
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-// Get attendance dates with summary counts
 app.get('/api/attendance/dates', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const result = await query(`
-            SELECT date, 
+            SELECT date,
                 COUNT(*) FILTER (WHERE status = 'Present') as present,
                 COUNT(*) FILTER (WHERE status = 'Absent') as absent,
                 COUNT(*) FILTER (WHERE status = 'Excused') as excused,
                 COUNT(*) as total
-            FROM attendance WHERE is_archived = false 
+            FROM attendance WHERE is_archived = false
             GROUP BY date ORDER BY date DESC LIMIT 90
         `);
         res.json({ success: true, data: result.rows });
@@ -373,7 +460,8 @@ app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) 
     try {
         const { attendanceRecords } = req.body;
         for (const record of attendanceRecords) {
-            await query("INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, $2, $3) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3", [record.student_id, record.status, record.remarks || null]);
+            await query("INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, $2, $3) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3",
+                [record.student_id, record.status, record.remarks || null]);
         }
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
@@ -397,67 +485,255 @@ app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req,
 });
 
 // ============================================
-// QR CODE ATTENDANCE
+// QR CODE ATTENDANCE — One-Time, Student Login
 // ============================================
+
+// Teacher generates a QR code
 app.post('/api/qr/generate', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const token = uuidv4();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
-        await query("INSERT INTO qr_tokens (token, date, created_by, expires_at) VALUES ($1, CURRENT_DATE, $2, $3)", [token, req.session.user.id, expiresAt]);
-        const qrUrl = `${req.protocol}://${req.get('host')}/api/qr/scan/${token}`;
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
+        await query("INSERT INTO qr_tokens (token, date, created_by, expires_at) VALUES ($1, CURRENT_DATE, $2, $3)",
+            [token, req.session.user.id, expiresAt]);
+
+        // URL points to the student-facing attendance login page
+        const qrUrl = `${req.protocol}://${req.get('host')}/attend/${token}`;
         const qrImage = await QRCode.toDataURL(qrUrl, { width: 300, margin: 2, color: { dark: '#0F172A', light: '#FFFFFF' } });
         res.json({ success: true, data: { token, qrImage, expiresAt: expiresAt.toISOString(), url: qrUrl } });
-    } catch (err) { console.error('QR generate error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
+    } catch (err) {
+        console.error('QR generate error:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
 });
 
-app.get('/api/qr/scan/:token', async (req, res) => {
+// Student scans QR → see student login page
+app.get('/attend/:token', async (req, res) => {
     try {
         const result = await query("SELECT * FROM qr_tokens WHERE token = $1", [req.params.token]);
         if (result.rows.length === 0) return res.send(qrResultPage('Invalid QR Code', 'This QR code is not recognized.', 'error'));
         const qr = result.rows[0];
-        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned.', 'warning'));
-        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('Expired', 'This QR code has expired. Ask your teacher for a new one.', 'error'));
-        // Show scan form
-        res.send(qrScanPage(req.params.token));
-    } catch (err) { res.status(500).send(qrResultPage('Error', 'Something went wrong.', 'error')); }
+        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned. Each QR code is single-use only.', 'warning'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your teacher to generate a new one.', 'error'));
+        // Show the student login page with the token embedded
+        res.send(studentAttendanceLoginPage(req.params.token));
+    } catch (err) {
+        console.error('QR scan error:', err);
+        res.status(500).send(qrResultPage('Error', 'Something went wrong. Please try again.', 'error'));
+    }
 });
 
-app.post('/api/qr/scan/:token', express.urlencoded({ extended: true }), async (req, res) => {
+// Student submits login via the QR attendance page
+app.post('/attend/:token', async (req, res) => {
     try {
+        const { email, password } = req.body;
+
+        // Validate QR token
         const tokenResult = await query("SELECT * FROM qr_tokens WHERE token = $1", [req.params.token]);
-        if (tokenResult.rows.length === 0) return res.send(qrResultPage('Invalid', 'QR code not found.', 'error'));
+        if (tokenResult.rows.length === 0) return res.send(qrResultPage('Invalid QR Code', 'This QR code is not recognized.', 'error'));
         const qr = tokenResult.rows[0];
-        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code was already scanned.', 'warning'));
-        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('Expired', 'This QR code has expired.', 'error'));
+        if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned.', 'warning'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your teacher for a new one.', 'error'));
 
-        const { student_id } = req.body;
-        const studentResult = await query("SELECT s.student_name FROM students s WHERE s.id = $1 AND s.is_archived = false", [student_id]);
-        if (studentResult.rows.length === 0) return res.send(qrResultPage('Not Found', 'Student not found.', 'error'));
+        // Authenticate student
+        const userResult = await query("SELECT * FROM users WHERE email = $1 AND role = 'student'", [email]);
+        if (userResult.rows.length === 0 || userResult.rows[0].password !== password) {
+            return res.send(studentAttendanceLoginPage(req.params.token, 'Invalid email or password. Please try again.'));
+        }
+        const user = userResult.rows[0];
 
-        await query("INSERT INTO attendance (student_id, date, status) VALUES ($1, CURRENT_DATE, 'Present') ON CONFLICT (student_id, date) DO UPDATE SET status = 'Present'", [student_id]);
-        await query("UPDATE qr_tokens SET used = true, used_at = NOW() WHERE token = $1", [req.params.token]);
+        // Find the student record linked to this user account
+        const studentResult = await query("SELECT * FROM students WHERE email = $1 AND is_archived = false", [user.email]);
+        if (studentResult.rows.length === 0) {
+            return res.send(qrResultPage('Account Not Linked', 'Your account is not linked to a student record. Please contact your teacher.', 'error'));
+        }
+        const student = studentResult.rows[0];
 
-        res.send(qrResultPage('Attendance Recorded', `${studentResult.rows[0].student_name} marked as Present!`, 'success'));
-    } catch (err) { res.status(500).send(qrResultPage('Error', 'Something went wrong.', 'error')); }
+        // Mark attendance as Present
+        await query(
+            "INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, 'Present', 'QR Code Scan') ON CONFLICT (student_id, date) DO UPDATE SET status = 'Present', remarks = 'QR Code Scan'",
+            [student.id]
+        );
+
+        // Mark QR token as used (one-time)
+        await query("UPDATE qr_tokens SET used = true, used_at = NOW(), used_by_student_id = $1 WHERE token = $2", [student.id, req.params.token]);
+
+        res.send(qrResultPage(
+            'Attendance Recorded!',
+            `Welcome, ${student.student_name}! You have been marked as Present for today (${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}).`,
+            'success'
+        ));
+    } catch (err) {
+        console.error('QR attendance submit error:', err);
+        res.status(500).send(qrResultPage('Error', 'Something went wrong. Please try again.', 'error'));
+    }
 });
 
-function qrScanPage(token) {
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S.M.A.R.T Attendance</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',sans-serif;background:#F8FAFC;color:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.card{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;border:1px solid #E2E8F0}.logo{font-size:24px;font-weight:700;background:linear-gradient(135deg,#2563EB,#0EA5E9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}.subtitle{color:#475569;font-size:14px;margin-bottom:20px}select,button{width:100%;padding:12px;border-radius:8px;font-size:15px;font-family:inherit}select{border:1.5px solid #E2E8F0;background:#F1F5F9;color:#0F172A;margin-bottom:12px;cursor:pointer}button{background:#2563EB;color:#fff;border:none;font-weight:600;cursor:pointer}button:hover{background:#1D4ED8}</style></head><body><div class="card"><h1 class="logo">S.M.A.R.T</h1><p class="subtitle">Select your name to mark attendance</p><form method="POST" action="/api/qr/scan/${token}" id="scanForm"><select name="student_id" required id="studentSelect"><option value="">Loading students...</option></select><button type="submit">Mark Present</button></form></div><script>fetch('/api/students/list-for-qr').then(r=>r.json()).then(d=>{const s=document.getElementById('studentSelect');s.innerHTML='<option value="">-- Select Your Name --</option>';if(d.success)d.data.forEach(st=>{const o=document.createElement('option');o.value=st.id;o.textContent=st.student_name+' ('+st.section_name+')';s.appendChild(o)})}).catch(()=>{document.getElementById('studentSelect').innerHTML='<option>Error loading</option>'})</script></body></html>`;
+// ============================================
+// QR PAGE TEMPLATES
+// ============================================
+function studentAttendanceLoginPage(token, errorMessage = '') {
+    const errorHtml = errorMessage
+        ? `<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px;margin-bottom:16px;color:#DC2626;font-size:14px;text-align:center;">${errorMessage}</div>`
+        : '';
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.M.A.R.T — Student Attendance Check-In</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0F172A 100%);
+        }
+        .card {
+            background: rgba(255,255,255,0.97);
+            border-radius: 20px;
+            padding: 40px 36px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.4s ease-out;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .logo-area { text-align: center; margin-bottom: 28px; }
+        .logo-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 60px; height: 60px; border-radius: 16px;
+            background: linear-gradient(135deg, #2563EB, #0EA5E9);
+            font-size: 22px; font-weight: 800; color: white;
+            margin-bottom: 12px; box-shadow: 0 8px 20px rgba(37,99,235,0.4);
+        }
+        .logo-title { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
+        .logo-sub { color: #64748B; font-size: 13px; margin-top: 4px; }
+        .qr-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0;
+            border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600;
+            margin-top: 10px;
+        }
+        .qr-dot { width: 6px; height: 6px; background: #16A34A; border-radius: 50%; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .form-title { font-size: 18px; font-weight: 700; color: #0F172A; margin-bottom: 6px; }
+        .form-sub { color: #64748B; font-size: 13px; margin-bottom: 24px; line-height: 1.5; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+        input[type="email"], input[type="password"] {
+            width: 100%; padding: 12px 14px; border-radius: 10px;
+            border: 1.5px solid #E2E8F0; font-size: 15px; font-family: inherit;
+            color: #0F172A; background: #F8FAFC; outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); background: white; }
+        .btn-submit {
+            width: 100%; padding: 14px; border-radius: 10px; border: none;
+            background: linear-gradient(135deg, #2563EB, #0EA5E9);
+            color: white; font-size: 16px; font-weight: 700; font-family: inherit;
+            cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 4px 15px rgba(37,99,235,0.35);
+        }
+        .btn-submit:hover { opacity: 0.92; }
+        .btn-submit:active { transform: scale(0.98); }
+        .footer-note { text-align: center; color: #94A3B8; font-size: 11px; margin-top: 20px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo-area">
+            <div class="logo-badge">SM</div>
+            <div class="logo-title">S.M.A.R.T</div>
+            <div class="logo-sub">Student Management And Record Tracking</div>
+            <div class="qr-badge"><div class="qr-dot"></div> QR Attendance Check-In</div>
+        </div>
+
+        ${errorHtml}
+
+        <div class="form-title">Student Sign In</div>
+        <p class="form-sub">Log in with your student account to mark your attendance for today.</p>
+
+        <form method="POST" action="/attend/${token}">
+            <div class="form-group">
+                <label for="email">Student Email Address</label>
+                <input type="email" id="email" name="email" placeholder="your.email@school.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn-submit">Mark Me Present ✓</button>
+        </form>
+
+        <p class="footer-note">This QR code is single-use only. Once you sign in, it cannot be used again.<br>S.M.A.R.T &mdash; &copy; 2024</p>
+    </div>
+</body>
+</html>`;
 }
 
 function qrResultPage(title, message, type) {
-    const colors = { success: '#16A34A', error: '#DC2626', warning: '#D97706' };
-    const bg = { success: '#F0FDF4', error: '#FEF2F2', warning: '#FFFBEB' };
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} - S.M.A.R.T</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',sans-serif;background:${bg[type]||'#F8FAFC'};min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}.card{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;border:2px solid ${colors[type]||'#E2E8F0'}}h1{color:${colors[type]};font-size:22px;margin-bottom:8px}p{color:#475569;font-size:15px;line-height:1.5}</style></head><body><div class="card"><h1>${title}</h1><p>${message}</p></div></body></html>`;
+    const config = {
+        success: { color: '#16A34A', bg: '#F0FDF4', border: '#BBF7D0', icon: '✓', iconBg: 'rgba(22,163,74,0.1)' },
+        error:   { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', icon: '✕', iconBg: 'rgba(220,38,38,0.1)' },
+        warning: { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', icon: '!', iconBg: 'rgba(217,119,6,0.1)' },
+    };
+    const c = config[type] || config.error;
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} — S.M.A.R.T</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0F172A 100%);
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 48px 36px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+            border-top: 4px solid ${c.color};
+            animation: slideUp 0.4s ease-out;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .icon-circle {
+            width: 72px; height: 72px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px;
+            background: ${c.iconBg};
+            font-size: 32px; color: ${c.color};
+            font-weight: 800;
+        }
+        h1 { color: ${c.color}; font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+        p { color: #475569; font-size: 15px; line-height: 1.6; }
+        .brand { margin-top: 28px; color: #94A3B8; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon-circle">${c.icon}</div>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <div class="brand">S.M.A.R.T — Student Management And Record Tracking</div>
+    </div>
+</body>
+</html>`;
 }
-
-// Public student list for QR scan page (no auth required)
-app.get('/api/students/list-for-qr', async (req, res) => {
-    try {
-        const result = await query("SELECT s.id, s.student_name, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false ORDER BY s.student_name");
-        res.json({ success: true, data: result.rows });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
-});
 
 // ============================================
 // GRADES API
@@ -485,7 +761,8 @@ app.get('/api/grades', isAuthenticated, async (req, res) => {
 app.post('/api/grades', isAuthenticated, isTeacher, async (req, res) => {
     try {
         const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
-        await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES ($1,$2,$3,$4,$5,$6,$7)", [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
+        await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -526,7 +803,8 @@ app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
 app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { title, content, target_audience, priority, expires_at } = req.body;
-        await query("INSERT INTO announcements (title, content, target_audience, priority, expires_at) VALUES ($1,$2,$3,$4,$5)", [title, content, target_audience || 'all', priority || 'normal', expires_at || null]);
+        await query("INSERT INTO announcements (title, content, target_audience, priority, expires_at) VALUES ($1,$2,$3,$4,$5)",
+            [title, content, target_audience || 'all', priority || 'normal', expires_at || null]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -534,7 +812,8 @@ app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, re
 app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const { title, content, target_audience, priority, expires_at } = req.body;
-        await query("UPDATE announcements SET title=$1, content=$2, target_audience=$3, priority=$4, expires_at=$5, updated_at=NOW() WHERE id=$6", [title, content, target_audience, priority, expires_at || null, req.params.id]);
+        await query("UPDATE announcements SET title=$1, content=$2, target_audience=$3, priority=$4, expires_at=$5, updated_at=NOW() WHERE id=$6",
+            [title, content, target_audience, priority, expires_at || null, req.params.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -596,12 +875,40 @@ app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) 
 });
 
 // ============================================
-// START SERVER
+// HEALTH CHECK — Vercel / Railway / Render
 // ============================================
-app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
-    console.log(`[S.M.A.R.T] URL: http://localhost:${PORT}/login.html`);
-    await createSessionTable();
-    await initDB();
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', db: pool ? 'configured' : 'not configured', ts: new Date().toISOString() });
 });
 
+// ============================================
+// EXPORT / START SERVER
+// Vercel: imports this module — do NOT call app.listen()
+// Local / Railway / Render: call app.listen() normally
+// ============================================
+
+// Run DB init once (for local dev and platforms that keep the process alive)
+async function bootstrap() {
+    if (!DATABASE_URL) {
+        console.error('[DB] ERROR: DATABASE_URL is not set! Please configure it in your hosting environment.');
+        console.error('[DB] Supabase: Project Settings → Database → Connection String (URI mode)');
+        return;
+    }
+    await createSessionTable();
+    await initDB();
+}
+
+// Vercel sets VERCEL=1 automatically in its environment
+if (process.env.VERCEL) {
+    // Serverless — export the app; Vercel handles the request lifecycle
+    bootstrap(); // fire-and-forget on cold start
+    module.exports = app;
+} else {
+    // Traditional server (local dev, Railway, Render)
+    app.listen(PORT, '0.0.0.0', async () => {
+        console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
+        console.log(`[S.M.A.R.T] URL: http://localhost:${PORT}/login.html`);
+        await bootstrap();
+    });
+    module.exports = app; // export anyway for testing
+}

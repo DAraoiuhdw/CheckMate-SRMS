@@ -50,7 +50,7 @@ let selectedTimelineDate = new Date();
 // ============================================
 // INITIALIZATION
 // ============================================
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     initializeTheme();
     checkAuthStatus();
     setupEventListeners();
@@ -166,7 +166,7 @@ function setupEventListeners() {
     document.querySelectorAll('.dark-mode-toggle').forEach(t => t.addEventListener('click', toggleDarkMode));
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
+        loginForm.addEventListener('submit', function (e) {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -195,19 +195,19 @@ function setupEventListeners() {
         });
     });
     document.querySelectorAll('.modal-close').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function () {
             const modal = this.closest('.modal');
             if (modal) modal.classList.remove('active');
             document.body.style.overflow = '';
         });
     });
     document.querySelectorAll('.modal').forEach(modal => {
-        modal.addEventListener('click', function(e) {
+        modal.addEventListener('click', function (e) {
             if (e.target === this) { this.classList.remove('active'); document.body.style.overflow = ''; }
         });
     });
     document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', function() {
+        tab.addEventListener('click', function () {
             const container = this.closest('.tabs');
             const parent = container.parentElement;
             container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -261,7 +261,7 @@ async function loadLatestAnnouncements() {
         const response = await fetch('/api/announcements/latest?limit=3');
         const data = await response.json();
         if (data.success) renderAnnouncementCards(document.getElementById('latest-announcements'), data.data, false);
-    } catch (error) {}
+    } catch (error) { }
 }
 
 // ============================================
@@ -378,7 +378,7 @@ async function searchAnnouncements(query) {
             const filtered = data.data.filter(a => a.title.toLowerCase().includes(query.toLowerCase()) || a.content.toLowerCase().includes(query.toLowerCase()));
             renderAnnouncementCards(document.getElementById('announcements-container'), filtered, true);
         }
-    } catch (error) {}
+    } catch (error) { }
 }
 
 // ============================================
@@ -467,7 +467,7 @@ async function searchStudents(query) {
         const response = await fetch(`/api/students/search/${encodeURIComponent(query)}`);
         const data = await response.json();
         if (data.success) displayStudents(data.data);
-    } catch (error) {}
+    } catch (error) { }
 }
 
 // ============================================
@@ -490,7 +490,7 @@ async function loadAttendanceDates() {
             attendanceDates = {};
             data.data.forEach(d => { attendanceDates[d.date.split('T')[0]] = d; });
         }
-    } catch (error) {}
+    } catch (error) { }
 }
 
 function renderTimelineCalendar() {
@@ -512,7 +512,7 @@ function renderTimelineCalendar() {
 
         const day = document.createElement('div');
         day.className = `timeline-day${isActive ? ' active' : ''}${hasData ? ' has-data' : ''}`;
-        day.innerHTML = `<div class="day-name">${d.toLocaleDateString('en-US', { weekday: 'short' }).substring(0,3)}</div><div class="day-num">${d.getDate()}</div>${isToday ? '<div style="width:4px;height:4px;background:var(--primary);border-radius:50%;margin:2px auto 0;"></div>' : ''}`;
+        day.innerHTML = `<div class="day-name">${d.toLocaleDateString('en-US', { weekday: 'short' }).substring(0, 3)}</div><div class="day-num">${d.getDate()}</div>${isToday ? '<div style="width:4px;height:4px;background:var(--primary);border-radius:50%;margin:2px auto 0;"></div>' : ''}`;
         day.addEventListener('click', () => {
             selectedTimelineDate = d;
             renderTimelineCalendar();
@@ -569,7 +569,7 @@ async function loadStudentsForAttendance() {
         const response = await fetch('/api/students');
         const data = await response.json();
         if (data.success) displayStudentsForAttendance(data.data);
-    } catch (error) {}
+    } catch (error) { }
 }
 
 function displayStudentsForAttendance(students) {
@@ -588,7 +588,7 @@ function displayStudentsForAttendance(students) {
         container.appendChild(card);
     });
     container.querySelectorAll('.attendance-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function () {
             const sid = this.dataset.student;
             container.querySelectorAll(`.attendance-btn[data-student="${sid}"]`).forEach(b => b.classList.remove('selected'));
             this.classList.add('selected');
@@ -630,7 +630,7 @@ function exportAttendanceForDate() {
     const date = formatDateISO(selectedTimelineDate);
     fetch(`/api/attendance?date=${date}`).then(r => r.json()).then(data => {
         if (data.success && data.data.length > 0) {
-            downloadCSV(generateCSV(data.data, ['student_name','section_name','status','remarks'], ['Student','Section','Status','Remarks']), `attendance_${date}.csv`);
+            downloadCSV(generateCSV(data.data, ['student_name', 'section_name', 'status', 'remarks'], ['Student', 'Section', 'Status', 'Remarks']), `attendance_${date}.csv`);
             showNotification('Exported', 'success');
         } else showNotification('No data to export', 'warning');
     }).catch(() => showNotification('Export failed', 'error'));
@@ -699,7 +699,7 @@ async function loadStudentsForGrades() {
             const filter = document.getElementById('student-filter');
             if (filter) { while (filter.children.length > 1) filter.removeChild(filter.lastChild); data.data.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.student_name; filter.appendChild(o); }); }
         }
-    } catch (error) {}
+    } catch (error) { }
 }
 
 function displayGrades(grades) {
@@ -821,7 +821,7 @@ async function handleNFCScan(serialNumber) {
             if (statusText) statusText.textContent = 'Unknown Tag';
             setTimeout(() => { if (scanArea) { scanArea.classList.remove('error'); scanArea.classList.add('scanning'); } if (statusText) statusText.textContent = 'Ready to Scan'; }, 2500);
         }
-    } catch (error) {}
+    } catch (error) { }
 }
 
 function addNFCLogEntry(name, status) {
@@ -849,7 +849,7 @@ async function loadSections() {
                 data.data.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.section_name; select.appendChild(o); });
             });
         }
-    } catch (error) {}
+    } catch (error) { }
 }
 
 // ============================================
@@ -879,18 +879,18 @@ function displayArchive(type, records) {
         return;
     }
     let html = '<div class="table-container"><table class="table"><thead><tr>';
-    const headers = { students: ['Name','Section','Email','Archived','Actions'], attendance: ['Student','Date','Status','Archived','Actions'], grades: ['Student','Subject','Grade','Archived','Actions'], announcements: ['Title','Audience','Priority','Archived','Actions'] };
+    const headers = { students: ['Name', 'Section', 'Email', 'Archived', 'Actions'], attendance: ['Student', 'Date', 'Status', 'Archived', 'Actions'], grades: ['Student', 'Subject', 'Grade', 'Archived', 'Actions'], announcements: ['Title', 'Audience', 'Priority', 'Archived', 'Actions'] };
     (headers[type] || []).forEach(h => html += `<th>${h}</th>`);
     html += '</tr></thead><tbody>';
     records.forEach(r => {
         html += '<tr class="fade-in">';
         switch (type) {
-            case 'students': html += `<td><strong>${escapeHtml(r.student_name)}</strong></td><td>${escapeHtml(r.section_name||'N/A')}</td><td>${escapeHtml(r.email||'N/A')}</td><td>${formatDate(r.archived_at)}</td>`; break;
+            case 'students': html += `<td><strong>${escapeHtml(r.student_name)}</strong></td><td>${escapeHtml(r.section_name || 'N/A')}</td><td>${escapeHtml(r.email || 'N/A')}</td><td>${formatDate(r.archived_at)}</td>`; break;
             case 'attendance': html += `<td><strong>${escapeHtml(r.student_name)}</strong></td><td>${formatDate(r.date)}</td><td><span class="badge badge-${getStatusBadgeClass(r.status)}">${r.status}</span></td><td>${formatDate(r.archived_at)}</td>`; break;
             case 'grades': html += `<td><strong>${escapeHtml(r.student_name)}</strong></td><td>${escapeHtml(r.subject)}</td><td><span class="badge badge-${getGradeClass(r.grade)}">${escapeHtml(r.grade)}</span></td><td>${formatDate(r.archived_at)}</td>`; break;
-            case 'announcements': html += `<td><strong>${escapeHtml(r.title)}</strong></td><td>${r.target_audience}</td><td><span class="badge badge-${r.priority==='high'?'danger':'normal'}">${r.priority}</span></td><td>${formatDate(r.archived_at)}</td>`; break;
+            case 'announcements': html += `<td><strong>${escapeHtml(r.title)}</strong></td><td>${r.target_audience}</td><td><span class="badge badge-${r.priority === 'high' ? 'danger' : 'normal'}">${r.priority}</span></td><td>${formatDate(r.archived_at)}</td>`; break;
         }
-        html += `<td><div class="table-actions"><button class="btn btn-sm btn-success" onclick="restoreArchive('${type}',${r.id})">${icon('undo',14)} Restore</button> <button class="btn btn-sm btn-danger" onclick="permanentDelete('${type}',${r.id})">${icon('trash',14)} Delete</button></div></td></tr>`;
+        html += `<td><div class="table-actions"><button class="btn btn-sm btn-success" onclick="restoreArchive('${type}',${r.id})">${icon('undo', 14)} Restore</button> <button class="btn btn-sm btn-danger" onclick="permanentDelete('${type}',${r.id})">${icon('trash', 14)} Delete</button></div></td></tr>`;
     });
     html += '</tbody></table></div>';
     container.innerHTML = html;
@@ -898,20 +898,20 @@ function displayArchive(type, records) {
 
 async function restoreArchive(type, id) {
     if (!confirm('Restore this record?')) return;
-    try { const r = await fetch(`/api/archive/${type}/${id}/restore`, { method: 'POST' }); const d = await r.json(); if (d.success) { showNotification('Restored', 'success'); loadArchive(type); } else showNotification(d.message||'Failed','error'); } catch (e) { showNotification('Network error','error'); }
+    try { const r = await fetch(`/api/archive/${type}/${id}/restore`, { method: 'POST' }); const d = await r.json(); if (d.success) { showNotification('Restored', 'success'); loadArchive(type); } else showNotification(d.message || 'Failed', 'error'); } catch (e) { showNotification('Network error', 'error'); }
 }
 
 async function permanentDelete(type, id) {
     if (!confirm('PERMANENTLY delete? This cannot be undone.')) return;
-    try { const r = await fetch(`/api/archive/${type}/${id}`, { method: 'DELETE' }); const d = await r.json(); if (d.success) { showNotification('Deleted', 'success'); loadArchive(type); } else showNotification(d.message||'Failed','error'); } catch (e) { showNotification('Network error','error'); }
+    try { const r = await fetch(`/api/archive/${type}/${id}`, { method: 'DELETE' }); const d = await r.json(); if (d.success) { showNotification('Deleted', 'success'); loadArchive(type); } else showNotification(d.message || 'Failed', 'error'); } catch (e) { showNotification('Network error', 'error'); }
 }
 
 // ============================================
 // CSV EXPORT
 // ============================================
-function exportStudents() { fetch('/api/students').then(r=>r.json()).then(d=>{ if (d.success) { downloadCSV(generateCSV(d.data,['student_name','section_name','email','phone','gender'],['Name','Section','Email','Phone','Gender']),'smart_students.csv'); showNotification('Exported','success'); } }).catch(()=>showNotification('Failed','error')); }
-function exportGrades() { fetch('/api/grades').then(r=>r.json()).then(d=>{ if (d.success) { downloadCSV(generateCSV(d.data,['student_name','section_name','subject','grade','score','max_score','semester','academic_year'],['Name','Section','Subject','Grade','Score','Max','Semester','Year']),'smart_grades.csv'); showNotification('Exported','success'); } }).catch(()=>showNotification('Failed','error')); }
-function generateCSV(data, fields, headers) { let csv = headers.join(',') + '\n'; data.forEach(row => { csv += fields.map(f => `"${String(row[f]??'').replace(/"/g,'""')}"`).join(',') + '\n'; }); return csv; }
+function exportStudents() { fetch('/api/students').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'email', 'phone', 'gender'], ['Name', 'Section', 'Email', 'Phone', 'Gender']), 'smart_students.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
+function exportGrades() { fetch('/api/grades').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'subject', 'grade', 'score', 'max_score', 'semester', 'academic_year'], ['Name', 'Section', 'Subject', 'Grade', 'Score', 'Max', 'Semester', 'Year']), 'smart_grades.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
+function generateCSV(data, fields, headers) { let csv = headers.join(',') + '\n'; data.forEach(row => { csv += fields.map(f => `"${String(row[f] ?? '').replace(/"/g, '""')}"`).join(',') + '\n'; }); return csv; }
 function downloadCSV(csv, filename) { const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
 
 // ============================================
@@ -925,9 +925,9 @@ function showNotification(message, type = 'info') {
     const n = document.createElement('div');
     n.className = `notification notification-${type}`;
     const icons = { success: icon('check', 16), error: icon('x', 16), warning: icon('alertTriangle', 16), info: icon('info', 16) };
-    n.innerHTML = `<span style="margin-right:6px;">${icons[type]||icons.info}</span>${message}`;
+    n.innerHTML = `<span style="margin-right:6px;">${icons[type] || icons.info}</span>${message}`;
     const colors = { success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)', info: 'var(--primary)' };
-    n.style.cssText = `position:fixed;top:16px;right:16px;padding:12px 18px;border-radius:10px;color:white;font-weight:500;font-size:14px;z-index:9999;max-width:360px;box-shadow:0 6px 20px rgba(0,0,0,0.15);animation:slideInRight 0.25s ease-out;display:flex;align-items:center;font-family:'Inter',sans-serif;background:${colors[type]||colors.info};`;
+    n.style.cssText = `position:fixed;top:16px;right:16px;padding:12px 18px;border-radius:10px;color:white;font-weight:500;font-size:14px;z-index:9999;max-width:360px;box-shadow:0 6px 20px rgba(0,0,0,0.15);animation:slideInRight 0.25s ease-out;display:flex;align-items:center;font-family:'Inter',sans-serif;background:${colors[type] || colors.info};`;
     document.body.appendChild(n);
     setTimeout(() => { n.style.animation = 'fadeOut 0.25s ease-out forwards'; setTimeout(() => n.remove(), 250); }, 3500);
 }
