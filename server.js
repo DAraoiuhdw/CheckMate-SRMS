@@ -305,7 +305,7 @@ const restrictedPages = {
     '/students.html': ['admin', 'teacher'],
     '/attendance.html': ['admin', 'teacher'],
     '/nfc-attendance.html': ['admin', 'teacher'],
-    '/archive.html': ['admin']
+    '/archive.html': ['admin', 'teacher']
 };
 
 app.get(['/students.html', '/attendance.html', '/nfc-attendance.html', '/archive.html'], (req, res, next) => {
@@ -1030,7 +1030,7 @@ app.get('/api/sections', async (req, res) => {
 // ============================================
 const archiveTables = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
 
-app.get('/api/archive/:type', isAuthenticated, isAdmin, async (req, res) => {
+app.get('/api/archive/:type', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         const table = archiveTables[req.params.type];
         if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });

@@ -1,4 +1,4 @@
-// S.M.A.R.T — Student Management And Record Tracking — Main JavaScript
+﻿// S.M.A.R.T — Student Management And Record Tracking — Main JavaScript
 // Role-Based Access, Archive System, SVG Icons, Light Mode Default, Timeline, QR Code
 
 // ============================================
@@ -891,30 +891,75 @@ async function loadStudentsForGrades() {
 }
 
 function displayGrades(grades) {
-    window._lastGrades = grades; // cache for summary view
+    window._lastGrades = grades;
     const tbody = document.getElementById('grades-tbody');
+    const thead = document.getElementById('grades-thead');
     if (!tbody) return;
     tbody.innerHTML = '';
+
+    const studentSelected = !!(document.getElementById('student-filter')?.value);
+
     if (grades.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('grades', 36)}</div><div class="empty-state-text">No grades found</div></div></td></tr>`;
+        if (thead) thead.innerHTML = '<tr><th>Student</th><th>Section</th><th>Final Grade</th><th>Avg Score</th><th>GPA</th><th>Subjects</th><th></th></tr>';
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('grades', 36)}</div><div class="empty-state-text">No grades found. Select a class or student to filter.</div></div></td></tr>`;
         updateGradeAnalytics([]);
         return;
     }
-    const role = currentUser ? currentUser.role : '';
-    grades.forEach(g => {
-        const pct = (g.score && g.max_score) ? Math.round((g.score / g.max_score) * 100) : null;
-        const barColor = pct === null ? 'var(--text-muted)' : pct >= 90 ? 'var(--success)' : pct >= 75 ? 'var(--primary)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
-        const pctHtml = pct !== null
-            ? `<div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${barColor};"></div></div><span style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</span></div>`
-            : '<span style="color:var(--text-muted);">—</span>';
-        const scoreHtml = g.score ? `<strong>${g.score}</strong> / ${g.max_score || '—'}` : '—';
-        let actions = '';
-        if (role === 'teacher' || role === 'admin') actions = `<button class="btn btn-sm btn-danger" onclick="deleteGrade(${g.id})">${icon('trash', 14)} Archive</button>`;
-        const row = document.createElement('tr');
-        row.className = 'fade-in';
-        row.innerHTML = `<td><strong>${escapeHtml(g.student_name)}</strong></td><td>${escapeHtml(g.section_name || 'N/A')}</td><td>${escapeHtml(g.subject)}</td><td><span class="badge badge-${getGradeClass(g.grade)}">${escapeHtml(g.grade)}</span></td><td>${scoreHtml}</td><td>${pctHtml}</td><td>${escapeHtml(g.semester || 'N/A')}</td><td>${escapeHtml(g.academic_year || 'N/A')}</td><td><div class="table-actions">${actions}</div></td>`;
-        tbody.appendChild(row);
-    });
+
+    if (studentSelected) {
+        // DETAIL MODE: per-subject rows for the selected student
+        if (thead) thead.innerHTML = '<tr><th>Student</th><th>Section</th><th>Subject</th><th>Grade</th><th>Score / Max</th><th>Percentage</th><th>Semester</th><th>Year</th><th></th></tr>';
+        const role = currentUser ? currentUser.role : '';
+        grades.forEach(g => {
+            const pct = (g.score && g.max_score) ? Math.round((g.score / g.max_score) * 100) : null;
+            const barColor = pct === null ? 'var(--text-muted)' : pct >= 90 ? 'var(--success)' : pct >= 75 ? 'var(--primary)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
+            const pctHtml = pct !== null
+                ? `<div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${barColor};"></div></div><span style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</span></div>`
+                : '<span style="color:var(--text-muted);">—</span>';
+            const scoreHtml = g.score ? `<strong>${g.score}</strong> / ${g.max_score || '—'}` : '—';
+            let actions = '';
+            if (role === 'teacher' || role === 'admin') actions = `<button class="btn btn-sm btn-danger" onclick="deleteGrade(${g.id})">${icon('trash', 14)} Archive</button>`;
+            const row = document.createElement('tr');
+            row.className = 'fade-in';
+            row.innerHTML = `<td><strong>${escapeHtml(g.student_name)}</strong></td><td>${escapeHtml(g.section_name || 'N/A')}</td><td>${escapeHtml(g.subject)}</td><td><span class="badge badge-${getGradeClass(g.grade)}">${escapeHtml(g.grade)}</span></td><td>${scoreHtml}</td><td>${pctHtml}</td><td>${escapeHtml(g.semester || 'N/A')}</td><td>${escapeHtml(g.academic_year || 'N/A')}</td><td><div class="table-actions">${actions}</div></td>`;
+            tbody.appendChild(row);
+        });
+    } else {
+        // SUMMARY MODE: one row per student with final overall grade
+        if (thead) thead.innerHTML = '<tr><th>Student</th><th>Section</th><th>Final Grade</th><th>Avg Score</th><th>GPA</th><th>Subjects</th><th style="color:var(--text-muted);font-size:12px;font-weight:500;">Click row to see details</th></tr>';
+        const letterToPct = {'A+':99,'A':94,'A-':91,'B+':88,'B':84,'B-':81,'C+':78,'C':74,'C-':71,'D+':68,'D':63,'F':50};
+        const students = {};
+        grades.forEach(g => {
+            const key = g.student_id || g.student_name;
+            if (!students[key]) students[key] = { student_id: g.student_id, student_name: g.student_name, section_name: g.section_name, pcts: [], count: 0 };
+            students[key].count++;
+            if (g.score && g.max_score) students[key].pcts.push((parseFloat(g.score) / parseFloat(g.max_score)) * 100);
+            else { const est = letterToPct[(g.grade || '').toUpperCase()]; if (est) students[key].pcts.push(est); }
+        });
+        Object.values(students).forEach((st, i) => {
+            const avg = st.pcts.length ? st.pcts.reduce((a, b) => a + b, 0) / st.pcts.length : 0;
+            const { grade, gpa } = pctToLetterGrade(avg);
+            const barColor = avg >= 90 ? 'var(--success)' : avg >= 75 ? 'var(--primary)' : avg >= 60 ? 'var(--warning)' : 'var(--danger)';
+            const row = document.createElement('tr');
+            row.className = 'fade-in';
+            row.style.cursor = 'pointer';
+            row.style.animationDelay = (i * 0.04) + 's';
+            row.title = 'Click to view individual subject grades for this student';
+            row.innerHTML = `
+                <td><strong>${escapeHtml(st.student_name)}</strong></td>
+                <td>${escapeHtml(st.section_name || 'N/A')}</td>
+                <td><span class="badge badge-${getGradeClass(grade)}" style="font-size:15px;padding:4px 14px;">${grade}</span></td>
+                <td><div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${Math.round(avg)}%;background:${barColor};"></div></div><span style="font-size:13px;font-weight:600;color:${barColor};">${Math.round(avg)}%</span></div></td>
+                <td style="font-weight:700;color:${barColor};">${gpa.toFixed(1)}</td>
+                <td style="color:var(--text-secondary);">${st.count} subject${st.count !== 1 ? 's' : ''}</td>
+                <td style="color:var(--primary);font-size:13px;font-weight:500;">→ Click to expand</td>`;
+            row.addEventListener('click', () => {
+                const sf = document.getElementById('student-filter');
+                if (sf && st.student_id) { sf.value = st.student_id; filterGrades(); }
+            });
+            tbody.appendChild(row);
+        });
+    }
     updateGradeAnalytics(grades);
 }
 

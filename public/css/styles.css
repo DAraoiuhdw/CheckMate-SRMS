@@ -803,6 +803,8 @@ div.header-actions[data-action-role]:not(.role-hidden) { display: flex !importan
 .tab-content[data-action-role] { display: none !important; }
 .tab-content[data-role].active,
 .tab-content[data-action-role].active { display: block !important; }
+/* Excuse letter checkbox row — always visible inside mark-attendance, never role-gated */
+.excuse-check-row { display: flex !important; }
 .show { display: block; }
 .w-full { width: 100%; }
 .flex { display: flex; }
