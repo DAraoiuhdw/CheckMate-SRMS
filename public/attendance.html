@@ -9,82 +9,40 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
-        /* ─── Month Calendar ─────────────────────── */
-        .cal-nav {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
-        }
-        .cal-nav-left { display: flex; align-items: center; gap: 10px; }
+        /* Full-month calendar */
+        .cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+        .cal-nav-left { display:flex; align-items:center; gap:10px; }
         .cal-month-select, .cal-year-select {
-            padding: 7px 12px; border: 1.5px solid var(--border-color);
-            border-radius: 8px; background: var(--input-bg); color: var(--text-primary);
-            font-size: 15px; font-weight: 600; font-family: inherit;
-            cursor: pointer; transition: all 0.2s;
+            padding:7px 12px; border:1.5px solid var(--border-color); border-radius:8px;
+            background:var(--input-bg); color:var(--text-primary); font-size:15px; font-weight:600;
+            font-family:inherit; cursor:pointer; transition:all 0.2s;
         }
         .cal-month-select:focus, .cal-year-select:focus { outline:none; border-color:var(--primary); }
         .cal-arrow {
-            width: 36px; height: 36px; border-radius: 8px;
-            border: 1.5px solid var(--border-color); background: var(--input-bg);
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            color: var(--text-secondary); transition: all 0.2s; font-size: 18px;
+            width:36px; height:36px; border-radius:8px; border:1.5px solid var(--border-color);
+            background:var(--input-bg); cursor:pointer; display:flex; align-items:center;
+            justify-content:center; color:var(--text-secondary); transition:all 0.2s; font-size:18px;
         }
-        .cal-arrow:hover { border-color: var(--primary); color: var(--primary); }
-
-        .cal-selected-date {
-            display: flex; align-items: center; gap: 8px;
-            font-size: 16px; font-weight: 700; color: var(--text-primary);
-        }
-        .live-dot {
-            width: 8px; height: 8px; background: var(--success); border-radius: 50%;
-            animation: livePulse 2s ease-in-out infinite;
-        }
-
-        /* Day-of-week headers */
-        .cal-dow-row {
-            display: grid; grid-template-columns: repeat(7, 1fr);
-            gap: 3px; margin-bottom: 3px;
-        }
-        .cal-dow {
-            text-align: center; font-size: 12px; font-weight: 700;
-            color: var(--text-muted); padding: 4px 0;
-            text-transform: uppercase; letter-spacing: 0.5px;
-        }
-
-        /* Month grid */
-        .cal-grid {
-            display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
-        }
-        .cal-day {
-            border-radius: 8px; padding: 8px 4px 6px;
-            text-align: center; cursor: pointer;
-            border: 1.5px solid transparent;
-            background: var(--bg-base);
-            transition: all 0.15s; position: relative;
-            min-height: 52px; display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-        }
-        .cal-day.empty { background: transparent; cursor: default; }
-        .cal-day:not(.empty):hover { border-color: var(--primary); background: var(--badge-blue-bg); }
-        .cal-day.today { border-color: var(--primary); font-weight: 700; }
-        .cal-day.active { background: var(--primary) !important; border-color: var(--primary); color: white; }
-        .cal-day.active .cal-day-dot { background: rgba(255,255,255,0.7); }
-        .cal-day.has-data { background: var(--badge-success-bg); border-color: var(--badge-success-border); }
-        .cal-day.active.has-data { background: var(--primary) !important; }
-        .cal-day-num { font-size: 15px; font-weight: 600; line-height: 1; }
-        .cal-day-dot {
-            width: 5px; height: 5px; border-radius: 50%;
-            background: var(--success); margin-top: 4px;
-            opacity: 0; transition: opacity 0.15s;
-        }
-        .cal-day.has-data .cal-day-dot { opacity: 1; }
-
-        @keyframes livePulse {
-            0%,100% { box-shadow:0 0 0 0 rgba(22,163,74,0.4); }
-            50% { box-shadow:0 0 0 6px rgba(22,163,74,0); }
-        }
-
-        /* Summary */
+        .cal-arrow:hover { border-color:var(--primary); color:var(--primary); }
+        .cal-selected-date { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:700; color:var(--text-primary); }
+        .live-dot { width:8px; height:8px; background:var(--success); border-radius:50%; animation:livePulse 2s ease-in-out infinite; }
+        .cal-dow-row { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; margin-bottom:3px; }
+        .cal-dow { text-align:center; font-size:12px; font-weight:700; color:var(--text-muted); padding:4px 0; text-transform:uppercase; letter-spacing:0.5px; }
+        .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+        .cal-day { border-radius:8px; padding:8px 4px 6px; text-align:center; cursor:pointer; border:1.5px solid transparent; background:var(--bg-base); transition:all 0.15s; position:relative; min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+        .cal-day.empty { background:transparent; cursor:default; }
+        .cal-day:not(.empty):hover { border-color:var(--primary); background:var(--badge-blue-bg); }
+        .cal-day.today { border-color:var(--primary); font-weight:700; }
+        .cal-day.active { background:var(--primary) !important; border-color:var(--primary); color:white; }
+        .cal-day.has-data { background:var(--badge-success-bg); border-color:var(--badge-success-border); }
+        .cal-day.active.has-data { background:var(--primary) !important; }
+        .cal-day-num { font-size:15px; font-weight:600; line-height:1; }
+        .cal-day-dot { width:5px; height:5px; border-radius:50%; background:var(--success); margin-top:4px; opacity:0; transition:opacity 0.15s; }
+        .cal-day.has-data .cal-day-dot { opacity:1; }
         .timeline-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:16px; }
         .timeline-stat { background:var(--bg-base); border-radius:10px; padding:14px; text-align:center; border:1px solid var(--border-color); }
         .timeline-stat .ts-value { font-size:30px; font-weight:800; }
@@ -92,6 +50,31 @@
         .timeline-stat.present .ts-value { color:var(--success); }
         .timeline-stat.absent .ts-value { color:var(--danger); }
         .timeline-stat.excused .ts-value { color:var(--warning); }
+
+        /* Excuse checkbox in mark attendance */
+        .excuse-check-row {
+            display: flex; align-items: center; gap: 8px; margin-top: 8px;
+            padding: 8px 12px; background: var(--badge-warning-bg); border:1.5px solid var(--badge-warning-border, #f59e0b44);
+            border-radius: 8px; cursor: pointer; user-select: none; width: fit-content;
+        }
+        .excuse-check-row input[type=checkbox] { width:16px; height:16px; cursor:pointer; accent-color:var(--warning); }
+        .excuse-check-row label { cursor:pointer; font-size:13px; font-weight:600; color:var(--warning); }
+
+        /* Excuse letter cards */
+        .excuse-card {
+            background:var(--card-bg); border:1.5px solid var(--border-color); border-radius:12px;
+            padding:16px 18px; margin-bottom:12px; animation:fadeUp 0.3s ease both;
+        }
+        .excuse-card.pending { border-left:4px solid var(--warning); }
+        .excuse-card.approved { border-left:4px solid var(--success); }
+        .excuse-card.rejected { border-left:4px solid var(--danger); }
+        .excuse-status { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:3px 8px; border-radius:20px; }
+        .excuse-status.pending { background:var(--badge-warning-bg); color:var(--warning); }
+        .excuse-status.approved { background:var(--badge-success-bg); color:var(--success); }
+        .excuse-status.rejected { background:var(--badge-danger-bg); color:var(--danger); }
+
+        @keyframes livePulse { 0%,100%{box-shadow:0 0 0 0 rgba(22,163,74,0.4);}50%{box-shadow:0 0 0 6px rgba(22,163,74,0);} }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);} }
     </style>
 </head>
 <body>
@@ -122,33 +105,27 @@
                     <p class="header-subtitle" id="live-clock">Loading date...</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-info" onclick="exportAttendanceForDate()">Export CSV</button>
+                    <button class="btn btn-info" onclick="exportAttendanceCSV()">Export CSV</button>
+                    <button class="btn btn-danger" onclick="exportAttendancePDF()">Export PDF</button>
                 </div>
             </header>
 
-            <!-- Month Calendar Card -->
+            <!-- Full Month Calendar -->
             <div class="card">
-                <!-- Navigation row -->
                 <div class="cal-nav">
                     <div class="cal-nav-left">
-                        <button class="cal-arrow" id="cal-prev" title="Previous month">&#8249;</button>
+                        <button class="cal-arrow" id="cal-prev">&#8249;</button>
                         <select class="cal-month-select" id="cal-month"></select>
                         <select class="cal-year-select" id="cal-year"></select>
-                        <button class="cal-arrow" id="cal-next" title="Next month">&#8250;</button>
+                        <button class="cal-arrow" id="cal-next">&#8250;</button>
                     </div>
                     <div class="cal-selected-date">
                         <span class="live-dot"></span>
                         <span id="timeline-date-display">Today</span>
                     </div>
                 </div>
-
-                <!-- Day-of-week row -->
                 <div class="cal-dow-row" id="cal-dow"></div>
-
-                <!-- Day grid -->
                 <div class="cal-grid" id="timeline-calendar"></div>
-
-                <!-- Summary stats -->
                 <div class="timeline-summary">
                     <div class="timeline-stat present"><div class="ts-value" id="timeline-present">0</div><div class="ts-label">Present</div></div>
                     <div class="timeline-stat absent"><div class="ts-value" id="timeline-absent">0</div><div class="ts-label">Absent</div></div>
@@ -159,24 +136,25 @@
             <!-- Tabs -->
             <div class="tabs">
                 <button class="tab active" data-tab="records-tab">Records</button>
-                <button class="tab" data-tab="mark-tab">Mark Attendance</button>
-                <button class="tab" data-tab="qr-tab">QR Code</button>
+                <button class="tab" data-tab="mark-tab" data-role="admin,teacher">Mark Attendance</button>
+                <button class="tab" data-tab="qr-tab" data-role="admin,teacher">QR Code</button>
+                <button class="tab" data-tab="excuse-tab">Excuse Letters</button>
             </div>
 
             <!-- Records Tab -->
             <div id="records-tab" class="tab-content active">
                 <div class="table-container">
-                    <table class="table">
-                        <thead><tr><th>Student</th><th>Section</th><th>Status</th><th>Remarks</th><th>Recorded</th></tr></thead>
+                    <table class="table" id="attendance-table">
+                        <thead><tr><th>Student</th><th>Section</th><th>Status</th><th>Excuse Letter</th><th>Remarks</th><th>Recorded</th></tr></thead>
                         <tbody id="attendance-tbody">
-                            <tr><td colspan="5" class="text-center"><div class="loading"></div></td></tr>
+                            <tr><td colspan="6" class="text-center"><div class="loading"></div></td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Mark Attendance Tab -->
-            <div id="mark-tab" class="tab-content">
+            <div id="mark-tab" class="tab-content" data-role="admin,teacher">
                 <div class="card">
                     <div class="card-header">
                         <h2 class="card-title">Mark Today's Attendance</h2>
@@ -187,7 +165,7 @@
             </div>
 
             <!-- QR Code Tab -->
-            <div id="qr-tab" class="tab-content">
+            <div id="qr-tab" class="tab-content" data-role="admin,teacher">
                 <div class="card">
                     <div class="qr-section">
                         <h2 class="card-title" style="margin-bottom:8px;">QR Code Attendance</h2>
@@ -196,6 +174,52 @@
                         <div id="qr-display" style="display:none;"></div>
                         <div id="qr-timer" class="qr-timer" style="margin-top:12px;"></div>
                         <p id="qr-status" class="qr-status"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Excuse Letters Tab (teacher/admin see all; student sees own + submit form) -->
+            <div id="excuse-tab" class="tab-content">
+
+                <!-- Teacher/Admin side -->
+                <div data-role="admin,teacher">
+                    <div class="card" style="margin-bottom:16px;">
+                        <div class="card-header">
+                            <h2 class="card-title">📋 Submitted Excuse Letters</h2>
+                            <button class="btn btn-secondary btn-sm" onclick="loadExcuseLetters()">Refresh</button>
+                        </div>
+                        <div id="excuse-letters-list">
+                            <div class="text-center" style="padding:20px;"><div class="loading"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Student side: submit form + own submissions -->
+                <div data-role="student">
+                    <div class="card" style="margin-bottom:16px;">
+                        <div class="card-header">
+                            <h2 class="card-title">📨 Submit an Excuse Letter</h2>
+                        </div>
+                        <form id="excuse-form" style="display:grid;gap:12px;max-width:540px;">
+                            <div class="form-group">
+                                <label class="form-label" for="excuse-date">Date of Absence *</label>
+                                <input type="date" id="excuse-date" class="form-input" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="excuse-reason">Reason / Explanation *</label>
+                                <textarea id="excuse-reason" class="form-textarea" rows="4" placeholder="Please explain your absence in detail…" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success" style="width:fit-content;">Submit Excuse Letter</button>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">My Submissions</h2>
+                            <button class="btn btn-secondary btn-sm" onclick="loadMyExcuseLetters()">Refresh</button>
+                        </div>
+                        <div id="my-excuse-letters">
+                            <div class="text-center" style="padding:20px;"><div class="loading"></div></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -213,5 +237,31 @@
         </main>
     </div>
     <script src="/js/script.js"></script>
+    <script>
+        // Excuse form handler (student)
+        document.getElementById('excuse-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const date = document.getElementById('excuse-date').value;
+            const reason = document.getElementById('excuse-reason').value.trim();
+            if (!date || !reason) return;
+            const btn = e.target.querySelector('button[type=submit]');
+            btn.disabled = true; btn.textContent = 'Submitting…';
+            try {
+                const res = await fetch('/api/excuse-letters', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ absence_date: date, reason })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification('Excuse letter submitted!', 'success');
+                    e.target.reset();
+                    loadMyExcuseLetters();
+                } else {
+                    showNotification(data.message || 'Submission failed', 'error');
+                }
+            } catch(err) { showNotification('Network error', 'error'); }
+            btn.disabled = false; btn.textContent = 'Submit Excuse Letter';
+        });
+    </script>
 </body>
 </html>

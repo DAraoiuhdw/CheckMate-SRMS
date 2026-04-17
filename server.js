@@ -240,6 +240,18 @@ async function runMigrations(client) {
             expires_at TIMESTAMP NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
         );
+        CREATE TABLE IF NOT EXISTS excuse_letters (
+            id SERIAL PRIMARY KEY,
+            student_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            student_name VARCHAR(200),
+            section_name VARCHAR(100),
+            absence_date DATE NOT NULL,
+            reason TEXT NOT NULL,
+            status VARCHAR(20) DEFAULT 'pending',
+            teacher_notes TEXT,
+            reviewed_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
     `);
 
     // Seed default data
@@ -258,6 +270,9 @@ async function runMigrations(client) {
     `);
 
     console.log('[DB] Migrations complete');
+    // Non-breaking column additions for existing databases
+    try { await client.query(`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS has_excuse_letter BOOLEAN DEFAULT FALSE`); } catch(e) {}
+    try { await client.query(`ALTER TABLE grades ADD COLUMN IF NOT EXISTS remarks TEXT`); } catch(e) {}
 }
 
 // ============================================
@@ -533,11 +548,23 @@ app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) 
     try {
         const { attendanceRecords } = req.body;
         for (const record of attendanceRecords) {
-            await query("INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, $2, $3) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3",
-                [record.student_id, record.status, record.remarks || null]);
+            await query(
+                "INSERT INTO attendance (student_id, date, status, remarks, has_excuse_letter) VALUES ($1, CURRENT_DATE, $2, $3, $4) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3, has_excuse_letter = $4",
+                [record.student_id, record.status, record.remarks || null, record.has_excuse_letter || false]
+            );
         }
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+    } catch (err) {
+        // Fallback for DBs without has_excuse_letter column yet
+        try {
+            const { attendanceRecords } = req.body;
+            for (const record of attendanceRecords) {
+                await query("INSERT INTO attendance (student_id, date, status, remarks) VALUES ($1, CURRENT_DATE, $2, $3) ON CONFLICT (student_id, date) DO UPDATE SET status = $2, remarks = $3",
+                    [record.student_id, record.status, record.remarks || null]);
+            }
+            res.json({ success: true });
+        } catch(e2) { res.status(500).json({ success: false, message: 'Server error' }); }
+    }
 });
 
 app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
@@ -839,34 +866,103 @@ app.get('/api/grades', isAuthenticated, async (req, res) => {
         if (role === 'student') {
             const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
             if (studentResult.rows.length === 0) return res.json({ success: true, data: [] });
-            sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false AND g.student_id = $1 ORDER BY g.created_at DESC";
+            sql = "SELECT g.*, s.student_name, sec.section_name, sec.id as section_id FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false AND g.student_id = $1 ORDER BY g.created_at DESC";
             params = [studentResult.rows[0].id];
         } else {
-            sql = "SELECT g.*, s.student_name, sec.section_name FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
+            sql = "SELECT g.*, s.student_name, sec.section_name, sec.id as section_id FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
             if (req.query.student_id) { params.push(req.query.student_id); sql += ` AND g.student_id = $${params.length}`; }
-            if (req.query.semester) { params.push(req.query.semester); sql += ` AND g.semester = $${params.length}`; }
-            sql += " ORDER BY g.created_at DESC";
+            if (req.query.semester)   { params.push(req.query.semester);   sql += ` AND g.semester = $${params.length}`; }
+            if (req.query.section_id) { params.push(req.query.section_id); sql += ` AND sec.id = $${params.length}`; }
+            sql += " ORDER BY s.student_name, g.subject, g.created_at DESC";
         }
         const result = await query(sql, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/grades', isAuthenticated, isTeacher, async (req, res) => {
+app.post('/api/grades', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
-        const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
-        await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
+        const { student_id, subject, grade, score, max_score, semester, academic_year, remarks } = req.body;
+        await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
+            [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null, remarks || null]);
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+    } catch (err) {
+        // remarks column may not exist on old DBs — retry without it
+        try {
+            const { student_id, subject, grade, score, max_score, semester, academic_year } = req.body;
+            await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+                [student_id, subject, grade, score || null, max_score || null, semester || null, academic_year || null]);
+            res.json({ success: true });
+        } catch (e2) { res.status(500).json({ success: false, message: 'Server error' }); }
+    }
 });
 
-app.delete('/api/grades/:id', isAuthenticated, isTeacher, async (req, res) => {
+app.delete('/api/grades/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
         await query("UPDATE grades SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
+
+// ============================================
+// EXCUSE LETTERS API
+// ============================================
+// Student: submit an excuse letter
+app.post('/api/excuse-letters', isAuthenticated, async (req, res) => {
+    try {
+        const { absence_date, reason } = req.body;
+        if (!absence_date || !reason) return res.json({ success: false, message: 'Date and reason are required.' });
+        const user = req.session.user;
+        // Get student's section name
+        let section_name = user.section_name || null;
+        await query(
+            'INSERT INTO excuse_letters (student_user_id, student_name, section_name, absence_date, reason) VALUES ($1,$2,$3,$4,$5)',
+            [user.id, user.name, section_name, absence_date, reason]
+        );
+        res.json({ success: true });
+    } catch (err) { console.error(err); res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// Teacher/Admin: view all excuse letters
+app.get('/api/excuse-letters', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const result = await query(
+            'SELECT * FROM excuse_letters ORDER BY status ASC, absence_date DESC'
+        );
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// Student: view their own excuse letters
+app.get('/api/excuse-letters/my', isAuthenticated, async (req, res) => {
+    try {
+        const result = await query(
+            'SELECT * FROM excuse_letters WHERE student_user_id = $1 ORDER BY created_at DESC',
+            [req.session.user.id]
+        );
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// Teacher/Admin: approve or reject
+app.put('/api/excuse-letters/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        const { status, teacher_notes } = req.body;
+        await query(
+            'UPDATE excuse_letters SET status=$1, teacher_notes=$2, reviewed_at=NOW() WHERE id=$3',
+            [status, teacher_notes || null, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+app.delete('/api/excuse-letters/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+    try {
+        await query('DELETE FROM excuse_letters WHERE id=$1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
 
 // ============================================
 // ANNOUNCEMENTS API

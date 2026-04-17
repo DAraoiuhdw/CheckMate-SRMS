@@ -693,13 +693,16 @@ function displayAttendanceRecords(records) {
     if (!tbody) return;
     tbody.innerHTML = '';
     if (records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('attendance', 36)}</div><div class="empty-state-text">No attendance records for this date</div></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('attendance', 36)}</div><div class="empty-state-text">No attendance records for this date</div></div></td></tr>`;
         return;
     }
     records.forEach(r => {
         const row = document.createElement('tr');
         row.className = 'fade-in';
-        row.innerHTML = `<td><div style="display:flex;align-items:center;gap:6px;"><div style="width:7px;height:7px;background:${getStatusColor(r.status)};border-radius:50%;"></div><strong>${escapeHtml(r.student_name)}</strong></div></td><td>${escapeHtml(r.section_name || 'N/A')}</td><td><span class="badge badge-${getStatusBadgeClass(r.status)}">${r.status}</span></td><td>${escapeHtml(r.remarks || '-')}</td><td>${formatDate(r.created_at)}</td>`;
+        const excuseBadge = r.has_excuse_letter
+            ? '<span class="badge badge-warning" title="Excuse letter submitted">📎 Submitted</span>'
+            : '<span style="color:var(--text-muted);font-size:13px;">—</span>';
+        row.innerHTML = `<td><div style="display:flex;align-items:center;gap:6px;"><div style="width:7px;height:7px;background:${getStatusColor(r.status)};border-radius:50%;"></div><strong>${escapeHtml(r.student_name)}</strong></div></td><td>${escapeHtml(r.section_name || 'N/A')}</td><td><span class="badge badge-${getStatusBadgeClass(r.status)}">${r.status}</span></td><td>${excuseBadge}</td><td>${escapeHtml(r.remarks || '-')}</td><td>${formatDate(r.created_at)}</td>`;
         tbody.appendChild(row);
     });
 }
@@ -724,7 +727,20 @@ function displayStudentsForAttendance(students) {
         const card = document.createElement('div');
         card.className = 'card fade-in';
         card.style.marginBottom = '8px';
-        card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><div><h4 style="font-size:16px;color:var(--text-primary);font-weight:600;">${escapeHtml(s.student_name)}</h4><p style="font-size:13px;color:var(--text-secondary);">${escapeHtml(s.section_name || 'No section')}</p></div></div><div class="attendance-buttons"><button class="attendance-btn present" data-student="${s.id}" data-status="Present">Present</button><button class="attendance-btn absent" data-student="${s.id}" data-status="Absent">Absent</button><button class="attendance-btn excused" data-student="${s.id}" data-status="Excused">Excused</button></div>`;
+        const excuseId = `excuse-${s.id}`;
+        card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div><h4 style="font-size:16px;color:var(--text-primary);font-weight:600;">${escapeHtml(s.student_name)}</h4><p style="font-size:13px;color:var(--text-secondary);">${escapeHtml(s.section_name || 'No section')}</p></div>
+            </div>
+            <div class="attendance-buttons">
+                <button class="attendance-btn present" data-student="${s.id}" data-status="Present">Present</button>
+                <button class="attendance-btn absent" data-student="${s.id}" data-status="Absent">Absent</button>
+                <button class="attendance-btn excused" data-student="${s.id}" data-status="Excused">Excused</button>
+            </div>
+            <div class="excuse-check-row" onclick="toggleExcuseCheck('${excuseId}','${s.id}')">
+                <input type="checkbox" id="${excuseId}" data-student="${s.id}" onclick="event.stopPropagation();">
+                <label for="${excuseId}">📎 Excuse letter submitted</label>
+            </div>`;
         container.appendChild(card);
     });
     container.querySelectorAll('.attendance-btn').forEach(btn => {
@@ -732,15 +748,37 @@ function displayStudentsForAttendance(students) {
             const sid = this.dataset.student;
             container.querySelectorAll(`.attendance-btn[data-student="${sid}"]`).forEach(b => b.classList.remove('selected'));
             this.classList.add('selected');
+            // Auto-select Excused if excuse checkbox is checked
+            const chk = document.getElementById(`excuse-${sid}`);
+            if (chk && chk.checked && this.dataset.status !== 'Excused') chk.checked = false;
         });
     });
+    container.querySelectorAll('input[type=checkbox]').forEach(chk => {
+        chk.addEventListener('change', function() {
+            if (this.checked) {
+                const sid = this.dataset.student;
+                container.querySelectorAll(`.attendance-btn[data-student="${sid}"]`).forEach(b => b.classList.remove('selected'));
+                const excusedBtn = container.querySelector(`.attendance-btn.excused[data-student="${sid}"]`);
+                if (excusedBtn) excusedBtn.classList.add('selected');
+            }
+        });
+    });
+}
+
+function toggleExcuseCheck(checkboxId, studentId) {
+    const chk = document.getElementById(checkboxId);
+    if (chk) { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change')); }
 }
 
 async function submitAttendance() {
     const selected = document.querySelectorAll('.attendance-btn.selected');
     if (selected.length === 0) { showNotification('Mark attendance for at least one student', 'error'); return; }
     const records = [];
-    selected.forEach(btn => { records.push({ student_id: parseInt(btn.dataset.student), status: btn.dataset.status }); });
+    selected.forEach(btn => {
+        const sid = btn.dataset.student;
+        const hasExcuse = document.getElementById(`excuse-${sid}`)?.checked || false;
+        records.push({ student_id: parseInt(sid), status: btn.dataset.status, has_excuse_letter: hasExcuse });
+    });
     try {
         showLoadingState('submit-attendance-btn');
         const response = await fetch('/api/attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attendanceRecords: records }) });
@@ -748,6 +786,7 @@ async function submitAttendance() {
         if (data.success) {
             showNotification(`Attendance submitted for ${records.length} students`, 'success');
             selected.forEach(btn => btn.classList.remove('selected'));
+            document.querySelectorAll('input[type=checkbox][id^=excuse-]').forEach(c => c.checked = false);
             await loadAttendanceDates();
             renderTimelineCalendar();
             loadAttendanceForDate(formatDateISO(selectedTimelineDate));
@@ -824,7 +863,7 @@ async function loadGrades() {
         showLoading('grades-tbody');
         const response = await fetch('/api/grades');
         const data = await response.json();
-        if (data.success) displayGrades(data.data);
+        if (data.success) { window._lastGrades = data.data; displayGrades(data.data); }
     } catch (error) { showNotification('Network error', 'error'); }
 }
 
@@ -840,9 +879,19 @@ async function loadStudentsForGrades() {
             if (filter) { while (filter.children.length > 1) filter.removeChild(filter.lastChild); data.data.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.student_name; filter.appendChild(o); }); }
         }
     } catch (error) { }
+    // Populate section filter from /api/sections
+    try {
+        const sr = await fetch('/api/sections');
+        const sd = await sr.json();
+        if (sd.success) {
+            const sf = document.getElementById('section-filter');
+            if (sf) { while (sf.children.length > 1) sf.removeChild(sf.lastChild); sd.data.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.section_name; sf.appendChild(o); }); }
+        }
+    } catch(e) { }
 }
 
 function displayGrades(grades) {
+    window._lastGrades = grades; // cache for summary view
     const tbody = document.getElementById('grades-tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -874,20 +923,147 @@ function updateGradeAnalytics(grades) {
     const withScore = grades.filter(g => g.score && g.max_score);
     const avgPct = withScore.length ? Math.round(withScore.reduce((s, g) => s + (g.score / g.max_score) * 100, 0) / withScore.length) : null;
     const subjects = new Set(grades.map(g => g.subject)).size;
-    // Top grade
+    const passing = withScore.length ? withScore.filter(g => (g.score / g.max_score) * 100 >= 75).length : 0;
+    const passRate = withScore.length ? Math.round((passing / withScore.length) * 100) : null;
     const gradeOrder = ['A+','A','A-','B+','B','B-','C+','C','C-','D+','D','F'];
     let topGrade = '—', topStudent = 'highest achiever';
     if (grades.length) {
         const sorted = [...grades].sort((a, b) => gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade));
-        topGrade = sorted[0].grade;
-        topStudent = sorted[0].student_name;
+        topGrade = sorted[0].grade; topStudent = sorted[0].student_name;
     }
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('ga-total', total);
-    set('ga-avg', avgPct !== null ? avgPct + '%' : '—');
-    set('ga-top', topGrade);
-    set('ga-top-student', topStudent);
-    set('ga-subjects', subjects || '—');
+    set('ga-total', total); set('ga-avg', avgPct !== null ? avgPct + '%' : '—');
+    set('ga-top', topGrade); set('ga-top-student', topStudent);
+    set('ga-subjects', subjects || '—'); set('ga-pass-rate', passRate !== null ? passRate + '%' : '—');
+}
+
+// ─── FINAL GRADE SUMMARY ───────────────────────────────────────────────────
+function pctToLetterGrade(pct) {
+    if (pct >= 97) return { grade: 'A+', gpa: 4.0 };
+    if (pct >= 93) return { grade: 'A',  gpa: 4.0 };
+    if (pct >= 90) return { grade: 'A-', gpa: 3.7 };
+    if (pct >= 87) return { grade: 'B+', gpa: 3.3 };
+    if (pct >= 83) return { grade: 'B',  gpa: 3.0 };
+    if (pct >= 80) return { grade: 'B-', gpa: 2.7 };
+    if (pct >= 77) return { grade: 'C+', gpa: 2.3 };
+    if (pct >= 73) return { grade: 'C',  gpa: 2.0 };
+    if (pct >= 70) return { grade: 'C-', gpa: 1.7 };
+    if (pct >= 67) return { grade: 'D+', gpa: 1.3 };
+    if (pct >= 60) return { grade: 'D',  gpa: 1.0 };
+    return { grade: 'F', gpa: 0.0 };
+}
+
+function renderFinalGradeCards(grades) {
+    const container = document.getElementById('final-grade-cards');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!grades || grades.length === 0) {
+        container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text-secondary);">No grade data to summarize.</div>';
+        return;
+    }
+    // Group by student
+    const students = {};
+    grades.forEach(g => {
+        const key = g.student_id || g.student_name;
+        if (!students[key]) students[key] = { name: g.student_name, section: g.section_name || 'N/A', subjects: {} };
+        if (!students[key].subjects[g.subject]) students[key].subjects[g.subject] = [];
+        if (g.score && g.max_score) students[key].subjects[g.subject].push((g.score / g.max_score) * 100);
+        else {
+            // Use letter grade to estimate percentage
+            const map = {'A+':99,'A':94,'A-':91,'B+':88,'B':84,'B-':81,'C+':78,'C':74,'C-':71,'D+':68,'D':63,'F':50};
+            const est = map[g.grade.toUpperCase()];
+            if (est) students[key].subjects[g.subject].push(est);
+        }
+    });
+    const gradeColors = { 'A+':'var(--success)','A':'var(--success)','A-':'var(--success)','B+':'var(--primary)','B':'var(--primary)','B-':'var(--primary)','C+':'var(--warning)','C':'var(--warning)','C-':'var(--warning)','D+':'var(--danger)','D':'var(--danger)','F':'var(--danger)' };
+    Object.values(students).forEach((st, i) => {
+        const subjectRows = Object.entries(st.subjects).map(([sub, pcts]) => {
+            const avg = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+            const { grade, gpa } = pctToLetterGrade(avg);
+            return { sub, avg: Math.round(avg), grade, gpa };
+        });
+        const overallAvg = subjectRows.reduce((a, b) => a + b.avg, 0) / (subjectRows.length || 1);
+        const final = pctToLetterGrade(overallAvg);
+        const card = document.createElement('div');
+        card.className = 'final-grade-card';
+        card.style.animationDelay = (i * 0.05) + 's';
+        card.innerHTML = `
+            <div class="fgc-name">${escapeHtml(st.name)}</div>
+            <div class="fgc-section">${escapeHtml(st.section)}</div>
+            <div class="fgc-subjects">
+                ${subjectRows.map(r => `<div class="fgc-subject-row"><span class="fgc-subject-name">${escapeHtml(r.sub)}</span><span class="fgc-subject-grade" style="color:${gradeColors[r.grade]||'var(--text-primary)'}">${r.grade} (${r.avg}%)</span></div>`).join('')}
+            </div>
+            <hr class="fgc-divider">
+            <div class="fgc-final">
+                <span class="fgc-final-label">Final Grade</span>
+                <div style="text-align:right;">
+                    <div class="fgc-final-grade" style="color:${gradeColors[final.grade]||'var(--text-primary)'}">${final.grade}</div>
+                    <div class="fgc-gpa">GPA ${final.gpa.toFixed(1)} &bull; ${Math.round(overallAvg)}%</div>
+                </div>
+            </div>`;
+        container.appendChild(card);
+    });
+}
+
+// ─── PDF / CSV EXPORTS ──────────────────────────────────────────────────────
+function exportGradesCSV() {
+    const grades = window._lastGrades || [];
+    if (!grades.length) { showNotification('No data to export', 'warning'); return; }
+    downloadCSV(generateCSV(grades, ['student_name','section_name','subject','grade','score','max_score','semester','academic_year'], ['Student','Class','Subject','Grade','Score','Max Score','Semester','Year']), 'grades_export.csv');
+    showNotification('CSV exported', 'success');
+}
+
+function exportGradesPDF() {
+    const grades = window._lastGrades || [];
+    if (!grades.length) { showNotification('No data to export', 'warning'); return; }
+    const { jsPDF } = window.jspdf;
+    if (!jsPDF) { showNotification('PDF library not loaded yet', 'error'); return; }
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('S.M.A.R.T — Grade Records', 14, 18);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`, 14, 25);
+    doc.autoTable({
+        startY: 30,
+        head: [['Student','Class','Subject','Grade','Score','Max','%','Semester','Year']],
+        body: grades.map(g => {
+            const pct = g.score && g.max_score ? Math.round((g.score / g.max_score) * 100) + '%' : '—';
+            return [g.student_name, g.section_name || 'N/A', g.subject, g.grade, g.score || '—', g.max_score || '—', pct, g.semester || 'N/A', g.academic_year || 'N/A'];
+        }),
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [99, 102, 241], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 248, 255] },
+        margin: { top: 30 }
+    });
+    doc.save(`grades_export_${new Date().toISOString().slice(0,10)}.pdf`);
+    showNotification('PDF exported', 'success');
+}
+
+function exportAttendanceCSV() { exportAttendanceForDate(); }
+
+function exportAttendancePDF() {
+    const date = formatDateISO(selectedTimelineDate);
+    fetch(`/api/attendance?date=${date}`).then(r => r.json()).then(data => {
+        if (!data.success || !data.data.length) { showNotification('No data to export', 'warning'); return; }
+        const { jsPDF } = window.jspdf;
+        if (!jsPDF) { showNotification('PDF library not loaded yet', 'error'); return; }
+        const doc = new jsPDF();
+        doc.setFontSize(16); doc.setFont('helvetica','bold');
+        doc.text('S.M.A.R.T — Attendance Records', 14, 18);
+        doc.setFontSize(10); doc.setFont('helvetica','normal');
+        doc.text(`Date: ${selectedTimelineDate.toLocaleDateString('en-US', { dateStyle: 'long' })}`, 14, 25);
+        doc.autoTable({
+            startY: 30,
+            head: [['Student','Section','Status','Excuse Letter','Remarks']],
+            body: data.data.map(r => [r.student_name, r.section_name || 'N/A', r.status, r.has_excuse_letter ? 'Yes ✓' : '—', r.remarks || '—']),
+            styles: { fontSize: 10, cellPadding: 3 },
+            headStyles: { fillColor: [99, 102, 241], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 248, 255] },
+            margin: { top: 30 }
+        });
+        doc.save(`attendance_${date}.pdf`);
+        showNotification('PDF exported', 'success');
+    }).catch(() => showNotification('Export failed', 'error'));
 }
 
 function getGradeClass(grade) { const g = (grade||'').toUpperCase(); if (g.startsWith('A')) return 'excellent'; if (g.startsWith('B')) return 'good'; if (g.startsWith('C')) return 'average'; return 'poor'; }
@@ -918,11 +1094,13 @@ async function filterGrades() {
     try {
         const studentId = document.getElementById('student-filter')?.value || '';
         const semester = document.getElementById('semester-filter')?.value || '';
+        const sectionId = document.getElementById('section-filter')?.value || '';
         const subjectText = (document.getElementById('subject-filter')?.value || '').toLowerCase().trim();
         const minScore = parseFloat(document.getElementById('minscore-filter')?.value || '') || 0;
         let url = '/api/grades?';
         if (studentId) url += `student_id=${studentId}&`;
-        if (semester) url += `semester=${semester}&`;
+        if (semester) url += `semester=${encodeURIComponent(semester)}&`;
+        if (sectionId) url += `section_id=${sectionId}&`;
         showLoading('grades-tbody');
         const response = await fetch(url);
         const data = await response.json();
@@ -930,13 +1108,14 @@ async function filterGrades() {
             let filtered = data.data;
             if (subjectText) filtered = filtered.filter(g => g.subject.toLowerCase().includes(subjectText));
             if (minScore > 0) filtered = filtered.filter(g => g.score && g.max_score && (g.score / g.max_score) * 100 >= minScore);
+            window._lastGrades = filtered;
             displayGrades(filtered);
         }
     } catch (error) { showNotification('Network error', 'error'); }
 }
 
 function resetFilters() {
-    ['student-filter','semester-filter','subject-filter','minscore-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['student-filter','semester-filter','subject-filter','minscore-filter','section-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     loadGrades();
 }
 
@@ -1127,3 +1306,96 @@ function getStatusColor(s) { switch (s) { case 'Present': return 'var(--success)
 const animStyle = document.createElement('style');
 animStyle.textContent = `@keyframes slideInRight{from{opacity:0;transform:translateX(60px);}to{opacity:1;transform:translateX(0);}}@keyframes fadeOut{from{opacity:1;transform:translateX(0);}to{opacity:0;transform:translateX(60px);}}`;
 document.head.appendChild(animStyle);
+
+// ============================================
+// EXCUSE LETTERS
+// ============================================
+async function loadExcuseLetters() {
+    const container = document.getElementById('excuse-letters-list');
+    if (!container) return;
+    container.innerHTML = '<div class="text-center" style="padding:20px;"><div class="loading"></div></div>';
+    try {
+        const res = await fetch('/api/excuse-letters');
+        const data = await res.json();
+        if (!data.success) { container.innerHTML = '<p style="padding:16px;color:var(--text-secondary);">Could not load excuse letters.</p>'; return; }
+        if (!data.data.length) { container.innerHTML = '<div class="empty-state" style="padding:32px;"><div class="empty-state-text">No excuse letters submitted yet.</div></div>'; return; }
+        container.innerHTML = '';
+        data.data.forEach(el => {
+            const card = document.createElement('div');
+            card.className = `excuse-card ${el.status}`;
+            card.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:var(--text-primary);">${escapeHtml(el.student_name || 'Unknown')}</div>
+                        <div style="font-size:13px;color:var(--text-secondary);">Section: ${escapeHtml(el.section_name || 'N/A')} &bull; Absent: ${formatDate(el.absence_date)}</div>
+                        <div style="margin-top:8px;font-size:14px;color:var(--text-primary);">${escapeHtml(el.reason)}</div>
+                        ${el.teacher_notes ? `<div style="margin-top:6px;font-size:13px;color:var(--text-secondary);font-style:italic;">Note: ${escapeHtml(el.teacher_notes)}</div>` : ''}
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                        <span class="excuse-status ${el.status}">${el.status.charAt(0).toUpperCase() + el.status.slice(1)}</span>
+                        <div style="font-size:12px;color:var(--text-muted);">Submitted ${formatDate(el.created_at)}</div>
+                        ${el.status === 'pending' ? `
+                        <div style="display:flex;gap:6px;margin-top:4px;">
+                            <button class="btn btn-sm btn-success" onclick="reviewExcuseLetter(${el.id},'approved')">Approve</button>
+                            <button class="btn btn-sm btn-danger" onclick="reviewExcuseLetter(${el.id},'rejected')">Reject</button>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+            container.appendChild(card);
+        });
+    } catch(e) { container.innerHTML = '<p style="padding:16px;color:var(--danger);">Network error.</p>'; }
+}
+
+async function reviewExcuseLetter(id, status) {
+    const notes = status === 'rejected' ? prompt('Add a note for the student (optional):') : null;
+    try {
+        const res = await fetch(`/api/excuse-letters/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status, teacher_notes: notes || null })
+        });
+        const data = await res.json();
+        if (data.success) { showNotification(`Excuse letter ${status}`, 'success'); loadExcuseLetters(); }
+        else showNotification(data.message || 'Failed', 'error');
+    } catch(e) { showNotification('Network error', 'error'); }
+}
+
+async function loadMyExcuseLetters() {
+    const container = document.getElementById('my-excuse-letters');
+    if (!container) return;
+    container.innerHTML = '<div class="text-center" style="padding:20px;"><div class="loading"></div></div>';
+    try {
+        const res = await fetch('/api/excuse-letters/my');
+        const data = await res.json();
+        if (!data.success || !data.data.length) {
+            container.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="empty-state-text">You have not submitted any excuse letters yet.</div></div>';
+            return;
+        }
+        container.innerHTML = '';
+        data.data.forEach(el => {
+            const card = document.createElement('div');
+            card.className = `excuse-card ${el.status}`;
+            card.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+                    <div>
+                        <div style="font-size:14px;font-weight:600;color:var(--text-primary);">Absence date: ${formatDate(el.absence_date)}</div>
+                        <div style="margin-top:6px;font-size:14px;color:var(--text-secondary);">${escapeHtml(el.reason)}</div>
+                        ${el.teacher_notes ? `<div style="margin-top:6px;font-size:13px;color:var(--primary);font-style:italic;">Teacher note: ${escapeHtml(el.teacher_notes)}</div>` : ''}
+                    </div>
+                    <span class="excuse-status ${el.status}">${el.status.charAt(0).toUpperCase() + el.status.slice(1)}</span>
+                </div>`;
+            container.appendChild(card);
+        });
+    } catch(e) { container.innerHTML = '<p style="padding:16px;color:var(--danger);">Network error.</p>'; }
+}
+
+// Hook: load excuse letters when that tab is activated
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab[data-tab="excuse-tab"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const role = currentUser?.role;
+            if (role === 'admin' || role === 'teacher') loadExcuseLetters();
+            else if (role === 'student') loadMyExcuseLetters();
+        });
+    });
+});
+
