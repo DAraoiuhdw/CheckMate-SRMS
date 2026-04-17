@@ -450,15 +450,25 @@ app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
 // ============================================
 app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
-        const result = await query("SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false ORDER BY s.student_name");
+        const { section_id } = req.query;
+        let sql = "SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false";
+        const params = [];
+        if (section_id) { params.push(parseInt(section_id)); sql += ` AND s.section_id = $${params.length}`; }
+        sql += " ORDER BY s.student_name";
+        const result = await query(sql, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
 app.get('/api/students/search/:q', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     try {
+        const { section_id } = req.query;
         const q = `%${req.params.q}%`;
-        const result = await query("SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false AND (s.student_name ILIKE $1 OR s.email ILIKE $1) ORDER BY s.student_name", [q]);
+        let sql = "SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false AND (s.student_name ILIKE $1 OR s.email ILIKE $1)";
+        const params = [q];
+        if (section_id) { params.push(parseInt(section_id)); sql += ` AND s.section_id = $${params.length}`; }
+        sql += " ORDER BY s.student_name";
+        const result = await query(sql, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });

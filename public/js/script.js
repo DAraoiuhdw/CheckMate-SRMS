@@ -1,4 +1,4 @@
-﻿// S.M.A.R.T — Student Management And Record Tracking — Main JavaScript
+// S.M.A.R.T — Student Management And Record Tracking — Main JavaScript
 // Role-Based Access, Archive System, SVG Icons, Light Mode Default, Timeline, QR Code
 
 // ============================================
@@ -453,7 +453,9 @@ async function searchAnnouncements(query) {
 async function loadStudents() {
     try {
         showLoading('students-tbody');
-        const response = await fetch('/api/students');
+        const sectionId = document.getElementById('section-filter')?.value || '';
+        const url = sectionId ? `/api/students?section_id=${sectionId}` : '/api/students';
+        const response = await fetch(url);
         const data = await response.json();
         if (data.success) displayStudents(data.data);
     } catch (error) { showNotification('Network error', 'error'); }
@@ -530,7 +532,9 @@ async function searchStudents(query) {
     if (!query || query.length < 2) { loadStudents(); return; }
     try {
         showLoading('students-tbody');
-        const response = await fetch(`/api/students/search/${encodeURIComponent(query)}`);
+        const sectionId = document.getElementById('section-filter')?.value || '';
+        const sectionParam = sectionId ? `?section_id=${sectionId}` : '';
+        const response = await fetch(`/api/students/search/${encodeURIComponent(query)}${sectionParam}`);
         const data = await response.json();
         if (data.success) displayStudents(data.data);
     } catch (error) { }

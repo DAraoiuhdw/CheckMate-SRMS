@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -60,7 +60,7 @@
                     <button class="btn btn-secondary" onclick="loadStudents()">Refresh</button>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                    <select id="section-filter" class="form-select section-select" style="width:auto;">
+                    <select id="section-filter" class="form-select section-select" style="width:auto;" onchange="loadStudents()">
                         <option value="">All Sections</option>
                     </select>
                     <button class="btn btn-info" onclick="exportStudents()">Export CSV</button>
