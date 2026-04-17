@@ -138,7 +138,7 @@
                 <button class="tab active" data-tab="records-tab">Records</button>
                 <button class="tab" data-tab="mark-tab" data-role="admin,teacher">Mark Attendance</button>
                 <button class="tab" data-tab="qr-tab" data-role="admin,teacher">QR Code</button>
-                <button class="tab" data-tab="excuse-tab">Excuse Letters</button>
+                <button class="tab" data-tab="excuse-tab" data-role="student">Excuse Letters</button>
             </div>
 
             <!-- Records Tab -->
@@ -181,18 +181,6 @@
             <!-- Excuse Letters Tab (teacher/admin see all; student sees own + submit form) -->
             <div id="excuse-tab" class="tab-content">
 
-                <!-- Teacher/Admin side -->
-                <div data-role="admin,teacher">
-                    <div class="card" style="margin-bottom:16px;">
-                        <div class="card-header">
-                            <h2 class="card-title">📋 Submitted Excuse Letters</h2>
-                            <button class="btn btn-secondary btn-sm" onclick="loadExcuseLetters()">Refresh</button>
-                        </div>
-                        <div id="excuse-letters-list">
-                            <div class="text-center" style="padding:20px;"><div class="loading"></div></div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Student side: submit form + own submissions -->
                 <div data-role="student">
