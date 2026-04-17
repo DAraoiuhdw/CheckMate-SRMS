@@ -142,19 +142,17 @@ async function logout() {
 function enforceRolePermissions() {
     if (!currentUser) return;
     const role = currentUser.role;
-    // Reveal elements the current role IS allowed to see
+    // Step 1: hide ALL role-gated elements (add role-hidden class)
+    document.querySelectorAll('[data-role]').forEach(el => el.classList.add('role-hidden'));
+    document.querySelectorAll('[data-action-role]').forEach(el => el.classList.add('role-hidden'));
+    // Step 2: reveal only elements the current role IS allowed to see
     document.querySelectorAll('[data-role]').forEach(el => {
         const allowed = el.dataset.role.split(',').map(r => r.trim());
-        if (allowed.includes(role)) {
-            el.classList.remove('role-hidden');
-        }
+        if (allowed.includes(role)) el.classList.remove('role-hidden');
     });
-    // Reveal action elements allowed for this role
     document.querySelectorAll('[data-action-role]').forEach(el => {
         const allowed = el.dataset.actionRole.split(',').map(r => r.trim());
-        if (allowed.includes(role)) {
-            el.classList.remove('role-hidden');
-        }
+        if (allowed.includes(role)) el.classList.remove('role-hidden');
     });
     // Mark body as auth-resolved so page transitions are clean
     document.body.classList.add('auth-resolved');
@@ -906,6 +904,10 @@ function displayGrades(grades) {
         return;
     }
 
+    // Show/hide back button
+    const backBtn = document.getElementById('grades-back-btn');
+    if (backBtn) backBtn.style.display = studentSelected ? 'inline-flex' : 'none';
+
     if (studentSelected) {
         // DETAIL MODE: per-subject rows for the selected student
         if (thead) thead.innerHTML = '<tr><th>Student</th><th>Section</th><th>Subject</th><th>Grade</th><th>Score / Max</th><th>Percentage</th><th>Semester</th><th>Year</th><th></th></tr>';
@@ -1157,6 +1159,12 @@ async function filterGrades() {
             displayGrades(filtered);
         }
     } catch (error) { showNotification('Network error', 'error'); }
+}
+
+function backToGradesSummary() {
+    const sf = document.getElementById('student-filter');
+    if (sf) sf.value = '';
+    loadGrades();
 }
 
 function resetFilters() {
