@@ -3,46 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Manage student grades in S.M.A.R.T — view, add, and export grade records.">
+    <meta name="description" content="Manage student grades in S.M.A.R.T — view, add, filter, and export grade records with GPA tracking.">
     <title>Grades - S.M.A.R.T</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        /* Grade analytics strip */
+        .grade-analytics {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .grade-analytic-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 16px 18px;
+            box-shadow: var(--card-shadow);
+            animation: fadeUp 0.4s ease both;
+        }
+        .grade-analytic-card:nth-child(1) { animation-delay: 0s; }
+        .grade-analytic-card:nth-child(2) { animation-delay: 0.07s; }
+        .grade-analytic-card:nth-child(3) { animation-delay: 0.14s; }
+        .grade-analytic-card:nth-child(4) { animation-delay: 0.21s; }
+        .ga-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .ga-value { font-size: 28px; font-weight: 800; color: var(--text-primary); }
+        .ga-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* Score bar */
+        .score-bar-wrap { display:flex; align-items:center; gap:8px; min-width:100px; }
+        .score-bar-bg { flex:1; height:6px; background:var(--border-color); border-radius:3px; overflow:hidden; }
+        .score-bar-fill { height:100%; border-radius:3px; transition:width 0.4s ease; }
+
+        /* Filter strip */
+        .filter-strip {
+            display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 14px 16px;
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; margin-bottom: 16px;
+            box-shadow: var(--card-shadow);
+        }
+        .filter-strip label { font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+        .filter-strip select, .filter-strip input { padding:7px 10px; font-size:14px; border:1.5px solid var(--border-color); border-radius:8px; background:var(--input-bg); color:var(--text-primary); font-family:inherit; }
+        .filter-strip select:focus, .filter-strip input:focus { outline:none; border-color:var(--primary); }
+
+        @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    </style>
 </head>
 <body>
     <button class="mobile-menu-btn"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
     <div class="dashboard-container">
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    <div class="sidebar-logo-icon">SM</div>
-                    <div class="sidebar-logo-text">S.M.A.R.T</div>
-                </div>
-            </div>
-            <nav>
-                <ul class="sidebar-nav">
-                    <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
-                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
-                    <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
-                    <li class="sidebar-nav-item" data-role="admin"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
-                </ul>
-            </nav>
+            <div class="sidebar-header"><div class="sidebar-logo"><div class="sidebar-logo-icon">SM</div><div class="sidebar-logo-text">S.M.A.R.T</div></div></div>
+            <nav><ul class="sidebar-nav">
+                <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
+                <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
+                <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
+                <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
+                <li class="sidebar-nav-item" data-role="admin"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
+            </ul></nav>
             <div class="sidebar-footer">
-                <div class="sidebar-user-card">
-                    <div class="sidebar-user-status"><div class="status-dot"></div><span style="font-size:12px;color:var(--text-secondary);">Online</span></div>
-                    <div class="sidebar-user-name user-name">User</div>
-                    <div class="sidebar-user-email user-email">user@example.com</div>
-                    <div class="sidebar-user-role user-role">Role</div>
-                </div>
+                <div class="sidebar-user-card"><div class="sidebar-user-status"><div class="status-dot"></div><span style="font-size:12px;color:var(--text-secondary);">Online</span></div><div class="sidebar-user-name user-name">User</div><div class="sidebar-user-email user-email">user@example.com</div><div class="sidebar-user-role user-role">Role</div></div>
                 <button class="dark-mode-toggle" style="position:static;margin-bottom:8px;width:100%;"><span class="toggle-icon"></span></button>
                 <button id="logoutBtn" class="btn btn-secondary" style="width:100%;">Logout</button>
             </div>
         </aside>
-        
+
         <main class="main-content">
             <header class="header">
                 <div>
@@ -50,25 +76,56 @@
                     <p class="header-subtitle">View and manage student grade records</p>
                 </div>
                 <div class="header-actions">
-                    <button onclick="openModal('add-grade-modal')" class="btn btn-success" data-action-role="teacher">+ Add Grade</button>
+                    <button onclick="openModal('add-grade-modal')" class="btn btn-success" data-action-role="teacher,admin">+ Add Grade</button>
                     <button class="btn btn-info" onclick="exportGrades()">Export CSV</button>
                 </div>
             </header>
-            
-            <div class="card">
-                <div class="search-bar">
-                    <select id="student-filter" class="form-select" style="width:auto;min-width:180px;" onchange="filterGrades()">
-                        <option value="">All Students</option>
-                    </select>
-                    <select id="semester-filter" class="form-select" style="width:auto;" onchange="filterGrades()">
-                        <option value="">All Semesters</option>
-                        <option value="First">First Semester</option>
-                        <option value="Second">Second Semester</option>
-                    </select>
-                    <button class="btn btn-secondary" onclick="loadGrades()">Refresh</button>
+
+            <!-- Analytics Strip -->
+            <div class="grade-analytics" id="grade-analytics">
+                <div class="grade-analytic-card">
+                    <div class="ga-label">Total Records</div>
+                    <div class="ga-value" id="ga-total">—</div>
+                    <div class="ga-sub">grade entries</div>
+                </div>
+                <div class="grade-analytic-card">
+                    <div class="ga-label">Average Score</div>
+                    <div class="ga-value" id="ga-avg">—</div>
+                    <div class="ga-sub">class average</div>
+                </div>
+                <div class="grade-analytic-card">
+                    <div class="ga-label">Top Grade</div>
+                    <div class="ga-value" id="ga-top" style="color:var(--success);">—</div>
+                    <div class="ga-sub" id="ga-top-student">highest achiever</div>
+                </div>
+                <div class="grade-analytic-card">
+                    <div class="ga-label">Subjects</div>
+                    <div class="ga-value" id="ga-subjects">—</div>
+                    <div class="ga-sub">distinct subjects</div>
                 </div>
             </div>
-            
+
+            <!-- Filter Strip -->
+            <div class="filter-strip">
+                <label>Student</label>
+                <select id="student-filter" class="form-select" style="min-width:160px;" onchange="filterGrades()">
+                    <option value="">All Students</option>
+                </select>
+                <label>Semester</label>
+                <select id="semester-filter" class="form-select" onchange="filterGrades()">
+                    <option value="">All Semesters</option>
+                    <option value="First">First Semester</option>
+                    <option value="Second">Second Semester</option>
+                </select>
+                <label>Subject</label>
+                <input type="text" id="subject-filter" class="form-input" placeholder="Filter by subject…" style="min-width:160px;" oninput="filterGrades()">
+                <label>Min Score %</label>
+                <input type="number" id="minscore-filter" class="form-input" placeholder="e.g. 75" style="width:100px;" min="0" max="100" oninput="filterGrades()">
+                <button class="btn btn-secondary" onclick="resetFilters()">Clear</button>
+                <button class="btn btn-secondary" onclick="loadGrades()">Refresh</button>
+            </div>
+
+            <!-- Table -->
             <div class="table-container">
                 <table class="table">
                     <thead>
@@ -77,26 +134,28 @@
                             <th>Section</th>
                             <th>Subject</th>
                             <th>Grade</th>
-                            <th>Score</th>
+                            <th>Score / Max</th>
+                            <th>Percentage</th>
                             <th>Semester</th>
                             <th>Year</th>
-                            <th>Actions</th>
+                            <th data-action-role="teacher,admin">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="grades-tbody">
-                        <tr><td colspan="8" class="text-center"><div class="loading"></div><p style="margin-top:8px;color:var(--text-secondary);">Loading...</p></td></tr>
+                        <tr><td colspan="9" class="text-center"><div class="loading"></div><p style="margin-top:8px;color:var(--text-secondary);">Loading...</p></td></tr>
                     </tbody>
                 </table>
             </div>
+
             <footer class="site-footer"><div class="footer-content"><div class="footer-left"><strong>S.M.A.R.T</strong> &copy; 2024 All Rights Reserved</div><div class="footer-right"><a href="tel:09688742671" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 09688742671</a><span class="footer-divider"></span><a href="mailto:deuscherhansbusiness@gmail.com" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> deuscherhansbusiness@gmail.com</a></div></div></footer>
         </main>
     </div>
-    
+
     <!-- Add Grade Modal -->
     <div id="add-grade-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title">Add Grade</h2>
+                <h2 class="modal-title">Add Grade Record</h2>
                 <button class="modal-close">&times;</button>
             </div>
             <form id="add-grade-form">
@@ -112,22 +171,30 @@
                         <input type="text" id="grade-subject" name="subject" class="form-input" placeholder="e.g. Mathematics" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="grade-grade">Grade *</label>
-                        <select id="grade-grade" name="grade" class="form-select" required>
+                        <label class="form-label" for="grade-grade">Letter Grade *</label>
+                        <select id="grade-grade" name="grade" class="form-select" required onchange="autoScoreFromGrade(this.value)">
                             <option value="">Select Grade</option>
-                            <option value="A+">A+</option><option value="A">A</option><option value="A-">A-</option>
-                            <option value="B+">B+</option><option value="B">B</option><option value="B-">B-</option>
-                            <option value="C+">C+</option><option value="C">C</option><option value="C-">C-</option>
-                            <option value="D">D</option><option value="F">F</option>
+                            <option value="A+">A+ (97–100)</option>
+                            <option value="A">A (93–96)</option>
+                            <option value="A-">A- (90–92)</option>
+                            <option value="B+">B+ (87–89)</option>
+                            <option value="B">B (83–86)</option>
+                            <option value="B-">B- (80–82)</option>
+                            <option value="C+">C+ (77–79)</option>
+                            <option value="C">C (73–76)</option>
+                            <option value="C-">C- (70–72)</option>
+                            <option value="D+">D+ (67–69)</option>
+                            <option value="D">D (60–66)</option>
+                            <option value="F">F (Below 60)</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="grade-score">Score</label>
-                        <input type="number" id="grade-score" name="score" class="form-input" placeholder="e.g. 95" step="0.01">
+                        <input type="number" id="grade-score" name="score" class="form-input" placeholder="e.g. 95" step="0.01" min="0">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="grade-max-score">Max Score</label>
-                        <input type="number" id="grade-max-score" name="max_score" class="form-input" placeholder="e.g. 100" step="0.01">
+                        <input type="number" id="grade-max-score" name="max_score" class="form-input" placeholder="e.g. 100" step="0.01" min="1" value="100">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="grade-semester">Semester</label>
@@ -139,7 +206,11 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="grade-year">Academic Year</label>
-                        <input type="text" id="grade-year" name="academic_year" class="form-input" placeholder="e.g. 2023-2024">
+                        <input type="text" id="grade-year" name="academic_year" class="form-input" placeholder="e.g. 2024-2025">
+                    </div>
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label class="form-label" for="grade-remarks">Remarks</label>
+                        <input type="text" id="grade-remarks" name="remarks" class="form-input" placeholder="Optional notes about this grade">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -149,7 +220,19 @@
             </form>
         </div>
     </div>
-    
+
     <script src="/js/script.js"></script>
+    <script>
+        // Auto-fill a representative score when letter grade is chosen
+        function autoScoreFromGrade(g) {
+            const map = { 'A+':99,'A':94,'A-':91,'B+':88,'B':84,'B-':81,'C+':78,'C':74,'C-':71,'D+':68,'D':63,'F':50 };
+            const scoreEl = document.getElementById('grade-score');
+            if (map[g] !== undefined && (!scoreEl.value || scoreEl.dataset.auto === '1')) {
+                scoreEl.value = map[g];
+                scoreEl.dataset.auto = '1';
+            }
+        }
+        document.getElementById('grade-score').addEventListener('input', function() { this.dataset.auto = '0'; });
+    </script>
 </body>
 </html>

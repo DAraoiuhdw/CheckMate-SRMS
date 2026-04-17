@@ -493,15 +493,69 @@ async function searchStudents(query) {
 }
 
 // ============================================
-// ATTENDANCE TIMELINE
+// ATTENDANCE TIMELINE — Full Month Calendar
 // ============================================
 let attendanceDates = {};
+let calViewYear, calViewMonth; // the month/year currently displayed
 
 async function initAttendanceTimeline() {
     selectedTimelineDate = new Date();
+    calViewYear = selectedTimelineDate.getFullYear();
+    calViewMonth = selectedTimelineDate.getMonth(); // 0-indexed
+    buildCalendarControls();
     await loadAttendanceDates();
-    renderTimelineCalendar();
+    renderMonthCalendar();
     loadAttendanceForDate(formatDateISO(selectedTimelineDate));
+}
+
+function buildCalendarControls() {
+    // --- DOW header ---
+    const dowRow = document.getElementById('cal-dow');
+    if (dowRow) {
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        dowRow.innerHTML = days.map(d => `<div class="cal-dow">${d}</div>`).join('');
+    }
+
+    // --- Month select ---
+    const monthSel = document.getElementById('cal-month');
+    if (monthSel) {
+        const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        monthSel.innerHTML = months.map((m, i) => `<option value="${i}"${i === calViewMonth ? ' selected' : ''}>${m}</option>`).join('');
+        monthSel.addEventListener('change', () => { calViewMonth = parseInt(monthSel.value); renderMonthCalendar(); });
+    }
+
+    // --- Year select ---
+    const yearSel = document.getElementById('cal-year');
+    if (yearSel) {
+        const curY = new Date().getFullYear();
+        let opts = '';
+        for (let y = curY - 3; y <= curY + 1; y++) opts += `<option value="${y}"${y === calViewYear ? ' selected' : ''}>${y}</option>`;
+        yearSel.innerHTML = opts;
+        yearSel.addEventListener('change', () => { calViewYear = parseInt(yearSel.value); renderMonthCalendar(); });
+    }
+
+    // --- Prev / Next arrows ---
+    document.getElementById('cal-prev')?.addEventListener('click', () => {
+        calViewMonth--;
+        if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+        syncCalSelects();
+        renderMonthCalendar();
+    });
+    document.getElementById('cal-next')?.addEventListener('click', () => {
+        calViewMonth++;
+        if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+        syncCalSelects();
+        renderMonthCalendar();
+    });
+}
+
+function syncCalSelects() {
+    const ms = document.getElementById('cal-month');
+    const ys = document.getElementById('cal-year');
+    if (ms) ms.value = calViewMonth;
+    if (ys) { if (![...ys.options].find(o => parseInt(o.value) === calViewYear)) {
+        const opt = document.createElement('option'); opt.value = calViewYear; opt.textContent = calViewYear; ys.appendChild(opt);
+    } ys.value = calViewYear; }
 }
 
 async function loadAttendanceDates() {
@@ -515,32 +569,47 @@ async function loadAttendanceDates() {
     } catch (error) { }
 }
 
-function renderTimelineCalendar() {
+function renderMonthCalendar() {
+    // Sync selects in case navigated via arrows
+    syncCalSelects();
+
     const container = document.getElementById('timeline-calendar');
     if (!container) return;
     container.innerHTML = '';
+
     const today = new Date();
     const todayStr = formatDateISO(today);
     const selectedStr = formatDateISO(selectedTimelineDate);
 
-    // Show last 14 days
-    for (let i = 13; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(today.getDate() - i);
-        const dStr = formatDateISO(d);
-        const hasData = attendanceDates[dStr];
-        const isActive = dStr === selectedStr;
-        const isToday = dStr === todayStr;
+    // First day of this month and how many days
+    const firstDay = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
 
-        const day = document.createElement('div');
-        day.className = `timeline-day${isActive ? ' active' : ''}${hasData ? ' has-data' : ''}`;
-        day.innerHTML = `<div class="day-name">${d.toLocaleDateString('en-US', { weekday: 'short' }).substring(0, 3)}</div><div class="day-num">${d.getDate()}</div>${isToday ? '<div style="width:4px;height:4px;background:var(--primary);border-radius:50%;margin:2px auto 0;"></div>' : ''}`;
-        day.addEventListener('click', () => {
-            selectedTimelineDate = d;
-            renderTimelineCalendar();
+    // Empty cells before the 1st
+    for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'cal-day empty';
+        container.appendChild(empty);
+    }
+
+    // Day cells
+    for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(calViewYear, calViewMonth, d);
+        const dStr = formatDateISO(date);
+        const hasData = !!attendanceDates[dStr];
+        const isToday = dStr === todayStr;
+        const isActive = dStr === selectedStr;
+
+        const cell = document.createElement('div');
+        cell.className = ['cal-day', isActive ? 'active' : '', hasData ? 'has-data' : '', isToday ? 'today' : ''].filter(Boolean).join(' ');
+        cell.innerHTML = `<div class="cal-day-num">${d}</div><div class="cal-day-dot"></div>`;
+        if (isToday) cell.title = 'Today';
+        cell.addEventListener('click', () => {
+            selectedTimelineDate = date;
+            renderMonthCalendar();
             loadAttendanceForDate(dStr);
         });
-        container.appendChild(day);
+        container.appendChild(cell);
     }
 
     // Update date display
@@ -549,6 +618,9 @@ function renderTimelineCalendar() {
         dateDisplay.textContent = selectedTimelineDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
 }
+
+// Keep legacy name so submitAttendance still works
+function renderTimelineCalendar() { renderMonthCalendar(); }
 
 async function loadAttendanceForDate(date) {
     try {
@@ -729,21 +801,50 @@ function displayGrades(grades) {
     if (!tbody) return;
     tbody.innerHTML = '';
     if (grades.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('grades', 36)}</div><div class="empty-state-text">No grades found</div></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center"><div class="empty-state"><div class="empty-state-icon">${icon('grades', 36)}</div><div class="empty-state-text">No grades found</div></div></td></tr>`;
+        updateGradeAnalytics([]);
         return;
     }
     const role = currentUser ? currentUser.role : '';
     grades.forEach(g => {
+        const pct = (g.score && g.max_score) ? Math.round((g.score / g.max_score) * 100) : null;
+        const barColor = pct === null ? 'var(--text-muted)' : pct >= 90 ? 'var(--success)' : pct >= 75 ? 'var(--primary)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
+        const pctHtml = pct !== null
+            ? `<div class="score-bar-wrap"><div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${barColor};"></div></div><span style="font-size:13px;font-weight:600;color:${barColor};">${pct}%</span></div>`
+            : '<span style="color:var(--text-muted);">—</span>';
+        const scoreHtml = g.score ? `<strong>${g.score}</strong> / ${g.max_score || '—'}` : '—';
+        let actions = '';
+        if (role === 'teacher' || role === 'admin') actions = `<button class="btn btn-sm btn-danger" onclick="deleteGrade(${g.id})">${icon('trash', 14)} Archive</button>`;
         const row = document.createElement('tr');
         row.className = 'fade-in';
-        let actions = '';
-        if (role === 'teacher') actions = `<button class="btn btn-sm btn-danger" onclick="deleteGrade(${g.id})">${icon('trash', 14)} Archive</button>`;
-        row.innerHTML = `<td><strong>${escapeHtml(g.student_name)}</strong></td><td>${escapeHtml(g.section_name || 'N/A')}</td><td>${escapeHtml(g.subject)}</td><td><span class="badge badge-${getGradeClass(g.grade)}">${escapeHtml(g.grade)}</span></td><td>${g.score ? `<strong>${g.score}</strong> / ${g.max_score || '-'}` : '-'}</td><td>${escapeHtml(g.semester || 'N/A')}</td><td>${escapeHtml(g.academic_year || 'N/A')}</td><td><div class="table-actions">${actions}</div></td>`;
+        row.innerHTML = `<td><strong>${escapeHtml(g.student_name)}</strong></td><td>${escapeHtml(g.section_name || 'N/A')}</td><td>${escapeHtml(g.subject)}</td><td><span class="badge badge-${getGradeClass(g.grade)}">${escapeHtml(g.grade)}</span></td><td>${scoreHtml}</td><td>${pctHtml}</td><td>${escapeHtml(g.semester || 'N/A')}</td><td>${escapeHtml(g.academic_year || 'N/A')}</td><td><div class="table-actions">${actions}</div></td>`;
         tbody.appendChild(row);
     });
+    updateGradeAnalytics(grades);
 }
 
-function getGradeClass(grade) { const g = grade.toUpperCase(); if (g.startsWith('A')) return 'excellent'; if (g.startsWith('B')) return 'good'; if (g.startsWith('C')) return 'average'; return 'poor'; }
+function updateGradeAnalytics(grades) {
+    const total = grades.length;
+    const withScore = grades.filter(g => g.score && g.max_score);
+    const avgPct = withScore.length ? Math.round(withScore.reduce((s, g) => s + (g.score / g.max_score) * 100, 0) / withScore.length) : null;
+    const subjects = new Set(grades.map(g => g.subject)).size;
+    // Top grade
+    const gradeOrder = ['A+','A','A-','B+','B','B-','C+','C','C-','D+','D','F'];
+    let topGrade = '—', topStudent = 'highest achiever';
+    if (grades.length) {
+        const sorted = [...grades].sort((a, b) => gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade));
+        topGrade = sorted[0].grade;
+        topStudent = sorted[0].student_name;
+    }
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('ga-total', total);
+    set('ga-avg', avgPct !== null ? avgPct + '%' : '—');
+    set('ga-top', topGrade);
+    set('ga-top-student', topStudent);
+    set('ga-subjects', subjects || '—');
+}
+
+function getGradeClass(grade) { const g = (grade||'').toUpperCase(); if (g.startsWith('A')) return 'excellent'; if (g.startsWith('B')) return 'good'; if (g.startsWith('C')) return 'average'; return 'poor'; }
 
 async function addGrade() {
     const form = document.getElementById('add-grade-form');
@@ -771,14 +872,26 @@ async function filterGrades() {
     try {
         const studentId = document.getElementById('student-filter')?.value || '';
         const semester = document.getElementById('semester-filter')?.value || '';
+        const subjectText = (document.getElementById('subject-filter')?.value || '').toLowerCase().trim();
+        const minScore = parseFloat(document.getElementById('minscore-filter')?.value || '') || 0;
         let url = '/api/grades?';
         if (studentId) url += `student_id=${studentId}&`;
         if (semester) url += `semester=${semester}&`;
         showLoading('grades-tbody');
         const response = await fetch(url);
         const data = await response.json();
-        if (data.success) displayGrades(data.data);
+        if (data.success) {
+            let filtered = data.data;
+            if (subjectText) filtered = filtered.filter(g => g.subject.toLowerCase().includes(subjectText));
+            if (minScore > 0) filtered = filtered.filter(g => g.score && g.max_score && (g.score / g.max_score) * 100 >= minScore);
+            displayGrades(filtered);
+        }
     } catch (error) { showNotification('Network error', 'error'); }
+}
+
+function resetFilters() {
+    ['student-filter','semester-filter','subject-filter','minscore-filter'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    loadGrades();
 }
 
 // ============================================
