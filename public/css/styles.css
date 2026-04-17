@@ -777,6 +777,21 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
 .hidden { display: none !important; }
+
+/* ─── Role-gating: hide by default, revealed by JS after auth resolves ─── */
+/* This prevents unauthorized nav items from flashing before the auth check */
+[data-role], [data-action-role] { display: none !important; }
+[data-role].role-hidden, [data-action-role].role-hidden { display: none !important; }
+/* After auth resolves: restore natural display for revealed elements */
+[data-role]:not(.role-hidden),
+[data-action-role]:not(.role-hidden) {
+    display: revert !important;
+}
+/* Sidebar nav items specifically need list-item */
+li[data-role]:not(.role-hidden) { display: list-item !important; }
+/* Stat grids and cards need block/grid */
+div[data-role]:not(.role-hidden) { display: block !important; }
+div.stats-grid[data-role]:not(.role-hidden) { display: grid !important; }
 .show { display: block; }
 .w-full { width: 100%; }
 .flex { display: flex; }

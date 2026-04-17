@@ -319,7 +319,19 @@ app.post('/api/auth/login', async (req, res) => {
         const user = result.rows[0];
         if (user.password !== password) return res.json({ success: false, message: 'Invalid credentials' });
 
-        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
+        // For students, also fetch their section name
+        let section_name = null;
+        if (user.role === 'student') {
+            try {
+                const sRes = await query(
+                    'SELECT sec.section_name FROM students st JOIN sections sec ON st.section_id = sec.id WHERE st.user_id = $1',
+                    [user.id]
+                );
+                if (sRes.rows.length > 0) section_name = sRes.rows[0].section_name;
+            } catch(e) { /* non-fatal */ }
+        }
+
+        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role, section_name };
         res.json({ success: true, user: req.session.user });
     } catch (err) {
         console.error('Login error:', err);

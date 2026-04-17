@@ -136,8 +136,52 @@
                     <a href="/attendance.html" class="btn btn-success" style="text-align:center;">Mark Attendance</a>
                     <a href="/nfc-attendance.html" class="btn btn-info" style="text-align:center;">NFC Scan</a>
                     <a href="/students.html" class="btn btn-secondary" style="text-align:center;">Add Student</a>
-                    <a href="/grades.html" class="btn btn-warning" data-role="teacher" style="text-align:center;">Add Grade</a>
+                    <a href="/grades.html" class="btn btn-warning" data-role="teacher,admin" style="text-align:center;">Add Grade</a>
                     <a href="/announcements.html" class="btn btn-danger" style="text-align:center;">Announcement</a>
+                </div>
+            </div>
+
+            <!-- Student-only: my profile card + quick links -->
+            <div data-role="student" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">My Profile</h2>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <div style="display:flex;align-items:center;gap:14px;">
+                            <div style="width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#7c3aed);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;flex-shrink:0;" id="student-avatar-initial">?</div>
+                            <div>
+                                <div style="font-size:18px;font-weight:700;color:var(--text-primary);" class="user-name">—</div>
+                                <div style="font-size:14px;color:var(--text-secondary);" class="user-email">—</div>
+                                <span style="font-size:12px;font-weight:600;padding:2px 8px;background:var(--badge-success-bg);color:var(--success);border-radius:20px;" class="user-role">student</span>
+                            </div>
+                        </div>
+                        <div style="border-top:1px solid var(--border-color);padding-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px;">
+                            <div>
+                                <div style="color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Section</div>
+                                <div style="font-weight:600;color:var(--text-primary);margin-top:2px;" id="student-section-display">—</div>
+                            </div>
+                            <div>
+                                <div style="color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Status</div>
+                                <div style="font-weight:600;color:var(--success);margin-top:2px;">Active</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Quick Links</h2>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <a href="/grades.html" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border-color);text-decoration:none;color:var(--text-primary);transition:all 0.2s;font-weight:500;" onmouseover="this.style.borderColor='var(--primary)';this.style.background='var(--badge-blue-bg)';" onmouseout="this.style.borderColor='var(--border-color)';this.style.background='';">
+                            <span style="width:36px;height:36px;border-radius:8px;background:var(--badge-blue-bg);display:flex;align-items:center;justify-content:center;">📚</span>
+                            <span>View My Grades</span>
+                        </a>
+                        <a href="/announcements.html" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border-color);text-decoration:none;color:var(--text-primary);transition:all 0.2s;font-weight:500;" onmouseover="this.style.borderColor='var(--primary)';this.style.background='var(--badge-blue-bg)';" onmouseout="this.style.borderColor='var(--border-color)';this.style.background='';">
+                            <span style="width:36px;height:36px;border-radius:8px;background:var(--badge-warning-bg);display:flex;align-items:center;justify-content:center;">📢</span>
+                            <span>View Announcements</span>
+                        </a>
+                    </div>
                 </div>
             </div>
             <!-- Footer -->

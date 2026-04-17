@@ -142,14 +142,22 @@ async function logout() {
 function enforceRolePermissions() {
     if (!currentUser) return;
     const role = currentUser.role;
+    // Reveal elements the current role IS allowed to see
     document.querySelectorAll('[data-role]').forEach(el => {
         const allowed = el.dataset.role.split(',').map(r => r.trim());
-        if (!allowed.includes(role)) el.classList.add('hidden');
+        if (allowed.includes(role)) {
+            el.classList.remove('role-hidden');
+        }
     });
+    // Reveal action elements allowed for this role
     document.querySelectorAll('[data-action-role]').forEach(el => {
         const allowed = el.dataset.actionRole.split(',').map(r => r.trim());
-        if (!allowed.includes(role)) el.classList.add('hidden');
+        if (allowed.includes(role)) {
+            el.classList.remove('role-hidden');
+        }
     });
+    // Mark body as auth-resolved so page transitions are clean
+    document.body.classList.add('auth-resolved');
 }
 
 function updateUserInterface() {
@@ -157,6 +165,14 @@ function updateUserInterface() {
     document.querySelectorAll('.user-name').forEach(el => el.textContent = currentUser.name);
     document.querySelectorAll('.user-email').forEach(el => el.textContent = currentUser.email);
     document.querySelectorAll('.user-role').forEach(el => el.textContent = currentUser.role);
+    // Student avatar initial
+    const avatar = document.getElementById('student-avatar-initial');
+    if (avatar && currentUser.name) avatar.textContent = currentUser.name.charAt(0).toUpperCase();
+    // Student section on dashboard — fetch from /api/auth/status which already has it
+    if (currentUser.role === 'student' && currentUser.section_name) {
+        const sec = document.getElementById('student-section-display');
+        if (sec) sec.textContent = currentUser.section_name;
+    }
 }
 
 // ============================================
@@ -295,8 +311,38 @@ async function loadAnnouncements() {
         if (container) container.innerHTML = '<div class="text-center" style="padding:24px;"><div class="loading"></div></div>';
         const response = await fetch('/api/announcements');
         const data = await response.json();
-        if (data.success) renderAnnouncementCards(container, data.data, true);
+        if (data.success) {
+            renderAnnouncementCards(container, data.data, true);
+            updateAnnouncementStats(data.data);
+        }
     } catch (error) { showNotification('Network error', 'error'); }
+}
+
+function updateAnnouncementStats(anns) {
+    const now = new Date();
+    const soon = new Date(now); soon.setDate(soon.getDate() + 7);
+    const total = anns.length;
+    const high = anns.filter(a => a.priority === 'high').length;
+    const expiring = anns.filter(a => a.expires_at && new Date(a.expires_at) <= soon && new Date(a.expires_at) >= now).length;
+    const forAll = anns.filter(a => a.target_audience === 'all').length;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('ann-total', total); set('ann-high', high);
+    set('ann-expiring', expiring); set('ann-all-audiences', forAll);
+}
+
+async function filterAnnouncementsByPriority() {
+    const priority = document.getElementById('ann-priority-filter')?.value || '';
+    const audience = document.getElementById('ann-audience-filter')?.value || '';
+    try {
+        const response = await fetch('/api/announcements');
+        const data = await response.json();
+        if (data.success) {
+            let filtered = data.data;
+            if (priority) filtered = filtered.filter(a => a.priority === priority);
+            if (audience) filtered = filtered.filter(a => a.target_audience === audience);
+            renderAnnouncementCards(document.getElementById('announcements-container'), filtered, true);
+        }
+    } catch(e) {}
 }
 
 function renderAnnouncementCards(container, announcements, showActions) {
