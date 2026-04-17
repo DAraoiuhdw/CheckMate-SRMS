@@ -792,6 +792,17 @@ li[data-role]:not(.role-hidden) { display: list-item !important; }
 /* Stat grids and cards need block/grid */
 div[data-role]:not(.role-hidden) { display: block !important; }
 div.stats-grid[data-role]:not(.role-hidden) { display: grid !important; }
+/* Tab buttons should be inline-flex (same as other .tab buttons) */
+button[data-role]:not(.role-hidden) { display: inline-flex !important; }
+/* Header action divs */
+div.header-actions[data-action-role]:not(.role-hidden) { display: flex !important; }
+/* Tab-content must NEVER be controlled by the role guard —
+   it is exclusively controlled by the tab switching JS (.active class).
+   This rule prevents the data-role guard from overriding the tab system. */
+.tab-content[data-role],
+.tab-content[data-action-role] { display: none !important; }
+.tab-content[data-role].active,
+.tab-content[data-action-role].active { display: block !important; }
 .show { display: block; }
 .w-full { width: 100%; }
 .flex { display: flex; }
