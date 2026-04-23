@@ -1,4 +1,4 @@
-// S.M.A.R.T — Student Management And Record Tracking
+// CheckMate-SRMS — Student Record Management System
 // Server — PostgreSQL (Supabase/Railway) + QR Code Attendance
 const express = require('express');
 const session = require('express-session');
@@ -110,7 +110,7 @@ class PgSessionStore extends session.Store {
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RENDER;
 app.use(session({
     store: new PgSessionStore(),
-    secret: process.env.SESSION_SECRET || 'smart-srms-secret-change-in-prod',
+    secret: process.env.SESSION_SECRET || 'checkmate-srms-secret-change-in-prod',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -170,7 +170,7 @@ async function runMigrations(client) {
             name VARCHAR(100) NOT NULL,
             email VARCHAR(100) NOT NULL UNIQUE,
             password VARCHAR(100) NOT NULL,
-            role VARCHAR(50) DEFAULT 'teacher',
+            role VARCHAR(50) DEFAULT 'officer',
             created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS sections (
@@ -257,9 +257,7 @@ async function runMigrations(client) {
     // Seed default data
     await client.query(`
         INSERT INTO users (name, email, password, role) VALUES
-            ('System Administrator', 'admin@smart-srms.com', 'admin123', 'admin'),
-            ('Demo Teacher', 'teacher@smart-srms.com', 'teacher123', 'teacher'),
-            ('John Michael Smith', 'john.smith@email.com', 'student123', 'student')
+            ('Class Officer', 'officer@checkmate-srms.com', 'officer123', 'officer')
         ON CONFLICT (email) DO NOTHING
     `);
     await client.query(`
@@ -282,40 +280,13 @@ function isAuthenticated(req, res, next) {
     if (req.session && req.session.user) return next();
     return res.status(401).json({ success: false, message: 'Not authenticated' });
 }
-function isAdmin(req, res, next) {
-    if (req.session?.user?.role === 'admin') return next();
-    return res.status(403).json({ success: false, message: 'Admin access required' });
-}
-function isTeacher(req, res, next) {
-    if (req.session?.user?.role === 'teacher') return next();
-    return res.status(403).json({ success: false, message: 'Teacher access required' });
-}
-function isTeacherOrAdmin(req, res, next) {
-    const role = req.session?.user?.role;
-    if (role === 'admin' || role === 'teacher') return next();
-    return res.status(403).json({ success: false, message: 'Admin or Teacher access required' });
-}
 
 // ============================================
-// PAGE ROUTING — Role-based
+// PAGE ROUTING — All authenticated users have full access
 // ============================================
 app.get('/', (req, res) => res.redirect('/login.html'));
 
-const restrictedPages = {
-    '/students.html': ['admin', 'teacher'],
-    '/attendance.html': ['admin', 'teacher'],
-    '/nfc-attendance.html': ['admin', 'teacher'],
-    '/archive.html': ['admin', 'teacher']
-};
-
-app.get(['/students.html', '/attendance.html', '/nfc-attendance.html', '/archive.html'], (req, res, next) => {
-    if (!req.session?.user) return res.redirect('/login.html');
-    const allowed = restrictedPages[req.path];
-    if (allowed && !allowed.includes(req.session.user.role)) return res.redirect('/announcements.html');
-    next();
-});
-
-app.get(['/dashboard.html', '/announcements.html', '/grades.html'], (req, res, next) => {
+app.get(['/students.html', '/attendance.html', '/nfc-attendance.html', '/archive.html', '/dashboard.html', '/announcements.html'], (req, res, next) => {
     if (!req.session?.user) return res.redirect('/login.html');
     next();
 });
@@ -334,19 +305,7 @@ app.post('/api/auth/login', async (req, res) => {
         const user = result.rows[0];
         if (user.password !== password) return res.json({ success: false, message: 'Invalid credentials' });
 
-        // For students, also fetch their section name
-        let section_name = null;
-        if (user.role === 'student') {
-            try {
-                const sRes = await query(
-                    'SELECT sec.section_name FROM students st JOIN sections sec ON st.section_id = sec.id WHERE st.user_id = $1',
-                    [user.id]
-                );
-                if (sRes.rows.length > 0) section_name = sRes.rows[0].section_name;
-            } catch(e) { /* non-fatal */ }
-        }
-
-        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role, section_name };
+        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
         res.json({ success: true, user: req.session.user });
     } catch (err) {
         console.error('Login error:', err);
@@ -363,84 +322,27 @@ app.post('/api/auth/logout', (req, res) => {
     req.session.destroy(() => res.json({ success: true }));
 });
 
-app.post('/api/auth/register', async (req, res) => {
-    try {
-        const { name, email, password, section_id } = req.body;
 
-        // Basic validation
-        if (!name || !email || !password) {
-            return res.json({ success: false, message: 'Name, email, and password are required.' });
-        }
-        if (password.length < 6) {
-            return res.json({ success: false, message: 'Password must be at least 6 characters.' });
-        }
-        if (!section_id || section_id === '') {
-            return res.json({ success: false, message: 'Please select your section.' });
-        }
-
-        // Check if email already exists
-        const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            return res.json({ success: false, message: 'An account with this email already exists.' });
-        }
-
-        // Create user account (role: student)
-        const userResult = await query(
-            'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-            [name.trim(), email.toLowerCase().trim(), password, 'student']
-        );
-        const user = userResult.rows[0];
-
-        // Create linked student record (auto-link by email for QR attendance)
-        const sid = section_id && section_id !== '' ? parseInt(section_id) : null;
-        await query(
-            'INSERT INTO students (student_name, email, section_id) VALUES ($1, $2, $3)',
-            [name.trim(), email.toLowerCase().trim(), sid]
-        );
-
-        // Auto-login: create session
-        req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
-        res.json({ success: true, user: req.session.user, message: 'Account created successfully!' });
-
-    } catch (err) {
-        console.error('[Register error]', err.message);
-        res.status(500).json({ success: false, message: 'Server error. Please try again.' });
-    }
-});
 
 // ============================================
 // DASHBOARD API
 // ============================================
 app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
     try {
-        const role = req.session.user.role;
-        let stats = {};
-        if (role === 'student') {
-            const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
-            const studentId = studentResult.rows[0]?.id;
-            const gradesResult = studentId
-                ? await query("SELECT COUNT(*) as count FROM grades WHERE student_id = $1 AND is_archived = false", [studentId])
-                : { rows: [{ count: 0 }] };
-            const annResult = await query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false");
-            stats = { totalGrades: parseInt(gradesResult.rows[0].count), activeAnnouncements: parseInt(annResult.rows[0].count) };
-        } else {
-            const [students, attendance, grades, announcements] = await Promise.all([
-                query("SELECT COUNT(*) as count FROM students WHERE is_archived = false"),
-                query("SELECT COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false"),
-                query("SELECT COUNT(*) as count FROM grades WHERE is_archived = false"),
-                query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false")
-            ]);
-            const attStats = await query("SELECT status, COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false GROUP BY status");
-            const attendanceStats = { present: 0, absent: 0, excused: 0 };
-            attStats.rows.forEach(r => { attendanceStats[r.status.toLowerCase()] = parseInt(r.count); });
-            stats = {
-                totalStudents: parseInt(students.rows[0].count),
-                todayAttendance: parseInt(attendance.rows[0].count),
-                totalGrades: parseInt(grades.rows[0].count),
-                activeAnnouncements: parseInt(announcements.rows[0].count),
-                attendanceStats
-            };
-        }
+        const [students, attendance, announcements] = await Promise.all([
+            query("SELECT COUNT(*) as count FROM students WHERE is_archived = false"),
+            query("SELECT COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false"),
+            query("SELECT COUNT(*) as count FROM announcements WHERE is_archived = false")
+        ]);
+        const attStats = await query("SELECT status, COUNT(*) as count FROM attendance WHERE date = CURRENT_DATE AND is_archived = false GROUP BY status");
+        const attendanceStats = { present: 0, absent: 0, excused: 0 };
+        attStats.rows.forEach(r => { attendanceStats[r.status.toLowerCase()] = parseInt(r.count); });
+        const stats = {
+            totalStudents: parseInt(students.rows[0].count),
+            todayAttendance: parseInt(attendance.rows[0].count),
+            activeAnnouncements: parseInt(announcements.rows[0].count),
+            attendanceStats
+        };
         res.json({ success: true, data: stats });
     } catch (err) { console.error('Dashboard error:', err); res.status(500).json({ success: false, message: 'Server error' }); }
 });
@@ -448,7 +350,7 @@ app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
 // ============================================
 // STUDENTS API
 // ============================================
-app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.get('/api/students', isAuthenticated, async (req, res) => {
     try {
         const { section_id } = req.query;
         let sql = "SELECT s.*, sec.section_name FROM students s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.is_archived = false";
@@ -460,7 +362,7 @@ app.get('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => 
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.get('/api/students/search/:q', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.get('/api/students/search/:q', isAuthenticated, async (req, res) => {
     try {
         const { section_id } = req.query;
         const q = `%${req.params.q}%`;
@@ -481,7 +383,7 @@ app.get('/api/students/list-for-qr', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.post('/api/students', isAuthenticated, async (req, res) => {
     try {
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
         await query("INSERT INTO students (student_name, section_id, email, phone, address, date_of_birth, gender) VALUES ($1,$2,$3,$4,$5,$6,$7)",
@@ -490,7 +392,7 @@ app.post('/api/students', isAuthenticated, isTeacherOrAdmin, async (req, res) =>
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.put('/api/students/:id', isAuthenticated, async (req, res) => {
     try {
         const { student_name, section_id, email, phone, address, date_of_birth, gender } = req.body;
         await query("UPDATE students SET student_name=$1, section_id=$2, email=$3, phone=$4, address=$5, date_of_birth=$6, gender=$7 WHERE id=$8",
@@ -499,7 +401,7 @@ app.put('/api/students/:id', isAuthenticated, isTeacherOrAdmin, async (req, res)
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.delete('/api/students/:id', isAuthenticated, isAdmin, async (req, res) => {
+app.delete('/api/students/:id', isAuthenticated, async (req, res) => {
     try {
         await query("UPDATE students SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
         res.json({ success: true });
@@ -514,7 +416,7 @@ app.get('/api/students/nfc/:tagId', isAuthenticated, async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.post('/api/students/:id/nfc', isAuthenticated, async (req, res) => {
     try {
         await query("UPDATE students SET nfc_tag_id = $1 WHERE id = $2", [req.body.nfc_tag_id, req.params.id]);
         res.json({ success: true });
@@ -524,7 +426,7 @@ app.post('/api/students/:id/nfc', isAuthenticated, isTeacherOrAdmin, async (req,
 // ============================================
 // ATTENDANCE API
 // ============================================
-app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.get('/api/attendance', isAuthenticated, async (req, res) => {
     try {
         const date = req.query.date || null;
         const section = req.query.section_id || null;
@@ -539,7 +441,7 @@ app.get('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) =
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.get('/api/attendance/dates', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.get('/api/attendance/dates', isAuthenticated, async (req, res) => {
     try {
         const result = await query(`
             SELECT date,
@@ -554,7 +456,7 @@ app.get('/api/attendance/dates', isAuthenticated, isTeacherOrAdmin, async (req, 
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/attendance', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.post('/api/attendance', isAuthenticated, async (req, res) => {
     try {
         const { attendanceRecords } = req.body;
         for (const record of attendanceRecords) {
@@ -587,7 +489,7 @@ app.post('/api/attendance/nfc', isAuthenticated, async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.delete('/api/attendance/:id', isAuthenticated, async (req, res) => {
     try {
         await query("UPDATE attendance SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
         res.json({ success: true });
@@ -598,8 +500,8 @@ app.delete('/api/attendance/:id', isAuthenticated, isTeacherOrAdmin, async (req,
 // QR CODE ATTENDANCE — One-Time, Student Login
 // ============================================
 
-// Teacher generates a QR code
-app.post('/api/qr/generate', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+// Teacher/Officer generates a QR code
+app.post('/api/qr/generate', isAuthenticated, async (req, res) => {
     try {
         const token = uuidv4();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
@@ -623,7 +525,7 @@ app.get('/attend/:token', async (req, res) => {
         if (result.rows.length === 0) return res.send(qrResultPage('Invalid QR Code', 'This QR code is not recognized.', 'error'));
         const qr = result.rows[0];
         if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned. Each QR code is single-use only.', 'warning'));
-        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your teacher to generate a new one.', 'error'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your class officer to generate a new one.', 'error'));
         // Show the student login page with the token embedded
         res.send(studentAttendanceLoginPage(req.params.token));
     } catch (err) {
@@ -642,10 +544,10 @@ app.post('/attend/:token', async (req, res) => {
         if (tokenResult.rows.length === 0) return res.send(qrResultPage('Invalid QR Code', 'This QR code is not recognized.', 'error'));
         const qr = tokenResult.rows[0];
         if (qr.used) return res.send(qrResultPage('Already Used', 'This QR code has already been scanned.', 'warning'));
-        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your teacher for a new one.', 'error'));
+        if (new Date() > new Date(qr.expires_at)) return res.send(qrResultPage('QR Code Expired', 'This QR code has expired. Ask your class officer for a new one.', 'error'));
 
         // Authenticate student
-        const userResult = await query("SELECT * FROM users WHERE email = $1 AND role = 'student'", [email]);
+        const userResult = await query("SELECT * FROM users WHERE email = $1", [email]);
         if (userResult.rows.length === 0 || userResult.rows[0].password !== password) {
             return res.send(studentAttendanceLoginPage(req.params.token, 'Invalid email or password. Please try again.'));
         }
@@ -669,7 +571,7 @@ app.post('/attend/:token', async (req, res) => {
             );
         }
         if (studentResult.rows.length === 0) {
-            return res.send(qrResultPage('Account Not Linked', `Your account (${user.email}) is not linked to a student record. Please contact your teacher to link your account.`, 'error'));
+            return res.send(qrResultPage('Account Not Linked', `Your account (${user.email}) is not linked to a student record. Please contact your class officer to link your account.`, 'error'));
         }
         const student = studentResult.rows[0];
         // Auto-link: save email to student record if not already set
@@ -711,7 +613,7 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>S.M.A.R.T — Student Attendance Check-In</title>
+    <title>CheckMate-SRMS — Student Attendance Check-In</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -722,7 +624,7 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
             align-items: center;
             justify-content: center;
             padding: 20px;
-            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0F172A 100%);
+            background: linear-gradient(135deg, #0F172A 0%, #14532D 50%, #0F172A 100%);
         }
         .card {
             background: rgba(255,255,255,0.97);
@@ -738,9 +640,9 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
         .logo-badge {
             display: inline-flex; align-items: center; justify-content: center;
             width: 60px; height: 60px; border-radius: 16px;
-            background: linear-gradient(135deg, #2563EB, #0EA5E9);
+            background: linear-gradient(135deg, #16A34A, #10B981);
             font-size: 22px; font-weight: 800; color: white;
-            margin-bottom: 12px; box-shadow: 0 8px 20px rgba(37,99,235,0.4);
+            margin-bottom: 12px; box-shadow: 0 8px 20px rgba(22,163,74,0.4);
         }
         .logo-title { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
         .logo-sub { color: #64748B; font-size: 13px; margin-top: 4px; }
@@ -762,13 +664,13 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
             color: #0F172A; background: #F8FAFC; outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        input:focus { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); background: white; }
+        input:focus { border-color: #16A34A; box-shadow: 0 0 0 3px rgba(22,163,74,0.1); background: white; }
         .btn-submit {
             width: 100%; padding: 14px; border-radius: 10px; border: none;
-            background: linear-gradient(135deg, #2563EB, #0EA5E9);
+            background: linear-gradient(135deg, #16A34A, #10B981);
             color: white; font-size: 16px; font-weight: 700; font-family: inherit;
             cursor: pointer; transition: opacity 0.2s, transform 0.1s;
-            box-shadow: 0 4px 15px rgba(37,99,235,0.35);
+            box-shadow: 0 4px 15px rgba(22,163,74,0.35);
         }
         .btn-submit:hover { opacity: 0.92; }
         .btn-submit:active { transform: scale(0.98); }
@@ -778,9 +680,9 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
 <body>
     <div class="card">
         <div class="logo-area">
-            <div class="logo-badge">SM</div>
-            <div class="logo-title">S.M.A.R.T</div>
-            <div class="logo-sub">Student Management And Record Tracking</div>
+            <div class="logo-badge">CM</div>
+            <div class="logo-title">CheckMate-SRMS</div>
+            <div class="logo-sub">Student Record Management System</div>
             <div class="qr-badge"><div class="qr-dot"></div> QR Attendance Check-In</div>
         </div>
 
@@ -801,7 +703,7 @@ function studentAttendanceLoginPage(token, errorMessage = '') {
             <button type="submit" class="btn-submit">Mark Me Present ✓</button>
         </form>
 
-        <p class="footer-note">This QR code is single-use only. Once you sign in, it cannot be used again.<br>S.M.A.R.T &mdash; &copy; 2024</p>
+        <p class="footer-note">This QR code is single-use only. Once you sign in, it cannot be used again.<br>CheckMate-SRMS &mdash; &copy; 2024</p>
     </div>
 </body>
 </html>`;
@@ -819,7 +721,7 @@ function qrResultPage(title, message, type) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title} — S.M.A.R.T</title>
+    <title>${title} — CheckMate-SRMS</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -828,7 +730,7 @@ function qrResultPage(title, message, type) {
             min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
             padding: 20px;
-            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0F172A 100%);
+            background: linear-gradient(135deg, #0F172A 0%, #14532D 50%, #0F172A 100%);
         }
         .card {
             background: white;
@@ -860,7 +762,7 @@ function qrResultPage(title, message, type) {
         <div class="icon-circle">${c.icon}</div>
         <h1>${title}</h1>
         <p>${message}</p>
-        <div class="brand">S.M.A.R.T — Student Management And Record Tracking</div>
+        <div class="brand">CheckMate-SRMS — Student Record Management System</div>
     </div>
 </body>
 </html>`;
@@ -871,26 +773,18 @@ function qrResultPage(title, message, type) {
 // ============================================
 app.get('/api/grades', isAuthenticated, async (req, res) => {
     try {
-        const role = req.session.user.role;
-        let sql, params = [];
-        if (role === 'student') {
-            const studentResult = await query("SELECT id FROM students WHERE email = $1 AND is_archived = false", [req.session.user.email]);
-            if (studentResult.rows.length === 0) return res.json({ success: true, data: [] });
-            sql = "SELECT g.*, s.student_name, sec.section_name, sec.id as section_id FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false AND g.student_id = $1 ORDER BY g.created_at DESC";
-            params = [studentResult.rows[0].id];
-        } else {
-            sql = "SELECT g.*, s.student_name, sec.section_name, sec.id as section_id FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
-            if (req.query.student_id) { params.push(req.query.student_id); sql += ` AND g.student_id = $${params.length}`; }
-            if (req.query.semester)   { params.push(req.query.semester);   sql += ` AND g.semester = $${params.length}`; }
-            if (req.query.section_id) { params.push(req.query.section_id); sql += ` AND sec.id = $${params.length}`; }
-            sql += " ORDER BY s.student_name, g.subject, g.created_at DESC";
-        }
+        let sql = "SELECT g.*, s.student_name, sec.section_name, sec.id as section_id FROM grades g JOIN students s ON g.student_id = s.id LEFT JOIN sections sec ON s.section_id = sec.id WHERE g.is_archived = false";
+        const params = [];
+        if (req.query.student_id) { params.push(req.query.student_id); sql += ` AND g.student_id = $${params.length}`; }
+        if (req.query.semester)   { params.push(req.query.semester);   sql += ` AND g.semester = $${params.length}`; }
+        if (req.query.section_id) { params.push(req.query.section_id); sql += ` AND sec.id = $${params.length}`; }
+        sql += " ORDER BY s.student_name, g.subject, g.created_at DESC";
         const result = await query(sql, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/grades', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.post('/api/grades', isAuthenticated, async (req, res) => {
     try {
         const { student_id, subject, grade, score, max_score, semester, academic_year, remarks } = req.body;
         await query("INSERT INTO grades (student_id, subject, grade, score, max_score, semester, academic_year, remarks) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
@@ -907,7 +801,7 @@ app.post('/api/grades', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
     }
 });
 
-app.delete('/api/grades/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.delete('/api/grades/:id', isAuthenticated, async (req, res) => {
     try {
         await query("UPDATE grades SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
         res.json({ success: true });
@@ -933,8 +827,8 @@ app.post('/api/excuse-letters', isAuthenticated, async (req, res) => {
     } catch (err) { console.error(err); res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-// Teacher/Admin: view all excuse letters
-app.get('/api/excuse-letters', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+// Officer: view all excuse letters
+app.get('/api/excuse-letters', isAuthenticated, async (req, res) => {
     try {
         const result = await query(
             'SELECT * FROM excuse_letters ORDER BY status ASC, absence_date DESC'
@@ -954,8 +848,8 @@ app.get('/api/excuse-letters/my', isAuthenticated, async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-// Teacher/Admin: approve or reject
-app.put('/api/excuse-letters/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+// Officer: approve or reject
+app.put('/api/excuse-letters/:id', isAuthenticated, async (req, res) => {
     try {
         const { status, teacher_notes } = req.body;
         await query(
@@ -966,7 +860,7 @@ app.put('/api/excuse-letters/:id', isAuthenticated, isTeacherOrAdmin, async (req
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.delete('/api/excuse-letters/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.delete('/api/excuse-letters/:id', isAuthenticated, async (req, res) => {
     try {
         await query('DELETE FROM excuse_letters WHERE id=$1', [req.params.id]);
         res.json({ success: true });
@@ -1000,7 +894,7 @@ app.get('/api/announcements/:id', isAuthenticated, async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.post('/api/announcements', isAuthenticated, async (req, res) => {
     try {
         const { title, content, target_audience, priority, expires_at } = req.body;
         await query("INSERT INTO announcements (title, content, target_audience, priority, expires_at) VALUES ($1,$2,$3,$4,$5)",
@@ -1009,7 +903,7 @@ app.post('/api/announcements', isAuthenticated, isTeacherOrAdmin, async (req, re
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.put('/api/announcements/:id', isAuthenticated, async (req, res) => {
     try {
         const { title, content, target_audience, priority, expires_at } = req.body;
         await query("UPDATE announcements SET title=$1, content=$2, target_audience=$3, priority=$4, expires_at=$5, updated_at=NOW() WHERE id=$6",
@@ -1018,7 +912,7 @@ app.put('/api/announcements/:id', isAuthenticated, isTeacherOrAdmin, async (req,
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.delete('/api/announcements/:id', isAuthenticated, isAdmin, async (req, res) => {
+app.delete('/api/announcements/:id', isAuthenticated, async (req, res) => {
     try {
         await query("UPDATE announcements SET is_archived = true, archived_at = NOW() WHERE id = $1", [req.params.id]);
         res.json({ success: true });
@@ -1040,7 +934,7 @@ app.get('/api/sections', async (req, res) => {
 // ============================================
 const archiveTables = { students: 'students', attendance: 'attendance', grades: 'grades', announcements: 'announcements' };
 
-app.get('/api/archive/:type', isAuthenticated, isTeacherOrAdmin, async (req, res) => {
+app.get('/api/archive/:type', isAuthenticated, async (req, res) => {
     try {
         const table = archiveTables[req.params.type];
         if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
@@ -1056,7 +950,7 @@ app.get('/api/archive/:type', isAuthenticated, isTeacherOrAdmin, async (req, res
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.post('/api/archive/:type/:id/restore', isAuthenticated, isAdmin, async (req, res) => {
+app.post('/api/archive/:type/:id/restore', isAuthenticated, async (req, res) => {
     try {
         const table = archiveTables[req.params.type];
         if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
@@ -1065,7 +959,7 @@ app.post('/api/archive/:type/:id/restore', isAuthenticated, isAdmin, async (req,
     } catch (err) { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 
-app.delete('/api/archive/:type/:id', isAuthenticated, isAdmin, async (req, res) => {
+app.delete('/api/archive/:type/:id', isAuthenticated, async (req, res) => {
     try {
         const table = archiveTables[req.params.type];
         if (!table) return res.status(400).json({ success: false, message: 'Invalid type' });
@@ -1111,8 +1005,8 @@ if (process.env.VERCEL) {
 } else {
     // Traditional server (local dev, Railway, Render)
     app.listen(PORT, '0.0.0.0', async () => {
-        console.log(`[S.M.A.R.T] Server running on port ${PORT}`);
-        console.log(`[S.M.A.R.T] URL: http://localhost:${PORT}/login.html`);
+        console.log(`[CheckMate-SRMS] Server running on port ${PORT}`);
+        console.log(`[CheckMate-SRMS] URL: http://localhost:${PORT}/login.html`);
         await bootstrap();
     });
     module.exports = app; // export anyway for testing

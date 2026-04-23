@@ -1,4 +1,4 @@
-// S.M.A.R.T — Student Management And Record Tracking — Main JavaScript
+// CheckMate-SRMS — Student Record Management System — Main JavaScript
 // Role-Based Access, Archive System, SVG Icons, Light Mode Default, Timeline, QR Code
 
 // ============================================
@@ -120,7 +120,7 @@ async function login(email, password) {
         const data = await response.json();
         if (data.success) {
             currentUser = data.user;
-            showNotification('Login successful! Welcome to S.M.A.R.T', 'success');
+            showNotification('Login successful! Welcome to CheckMate', 'success');
             setTimeout(() => { window.location.href = '/announcements.html'; }, 800);
         } else {
             showNotification(data.message || 'Login failed', 'error');
@@ -139,22 +139,7 @@ async function logout() {
 // ============================================
 // ROLE-BASED PERMISSIONS
 // ============================================
-function enforceRolePermissions() {
-    if (!currentUser) return;
-    const role = currentUser.role;
-    // Step 1: hide ALL role-gated elements (add role-hidden class)
-    document.querySelectorAll('[data-role]').forEach(el => el.classList.add('role-hidden'));
-    document.querySelectorAll('[data-action-role]').forEach(el => el.classList.add('role-hidden'));
-    // Step 2: reveal only elements the current role IS allowed to see
-    document.querySelectorAll('[data-role]').forEach(el => {
-        const allowed = el.dataset.role.split(',').map(r => r.trim());
-        if (allowed.includes(role)) el.classList.remove('role-hidden');
-    });
-    document.querySelectorAll('[data-action-role]').forEach(el => {
-        const allowed = el.dataset.actionRole.split(',').map(r => r.trim());
-        if (allowed.includes(role)) el.classList.remove('role-hidden');
-    });
-    // Mark body as auth-resolved so page transitions are clean
+    // No role gating needed — all users are officers
     document.body.classList.add('auth-resolved');
 }
 
@@ -166,11 +151,6 @@ function updateUserInterface() {
     // Student avatar initial
     const avatar = document.getElementById('student-avatar-initial');
     if (avatar && currentUser.name) avatar.textContent = currentUser.name.charAt(0).toUpperCase();
-    // Student section on dashboard — fetch from /api/auth/status which already has it
-    if (currentUser.role === 'student' && currentUser.section_name) {
-        const sec = document.getElementById('student-section-display');
-        if (sec) sec.textContent = currentUser.section_name;
-    }
 }
 
 // ============================================
@@ -263,7 +243,6 @@ function initializePageSpecificFeatures() {
     if (path.includes('dashboard.html') || path === '/') loadDashboardData();
     else if (path.includes('students.html')) { loadStudents(); loadSections(); }
     else if (path.includes('attendance.html')) { initAttendanceTimeline(); loadStudentsForAttendance(); loadSections(); }
-    else if (path.includes('grades.html')) { loadGrades(); loadStudentsForGrades(); loadSections(); }
     else if (path.includes('announcements.html')) loadAnnouncements();
     else if (path.includes('nfc-attendance.html')) initializeNFC();
     else if (path.includes('archive.html')) loadArchive('students');
@@ -280,7 +259,6 @@ async function loadDashboardData() {
             const s = data.data;
             updateStatCard('total-students', s.totalStudents);
             updateStatCard('today-attendance', s.todayAttendance);
-            updateStatCard('total-grades', s.totalGrades);
             updateStatCard('active-announcements', s.activeAnnouncements);
             if (s.attendanceStats) {
                 updateStatCard('present-today', s.attendanceStats.present || 0);
@@ -355,10 +333,8 @@ function renderAnnouncementCards(container, announcements, showActions) {
         const card = document.createElement('div');
         card.className = `announcement-card fade-in ${a.priority === 'high' ? 'high-priority' : ''}`;
         let actions = '';
-        if (showActions && (role === 'admin' || role === 'teacher')) {
+        if (showActions) {
             actions = `<button class="btn btn-sm btn-secondary" onclick="editAnnouncement(${a.id})">${icon('edit', 14)} Edit</button>`;
-        }
-        if (showActions && role === 'admin') {
             actions += ` <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">${icon('trash', 14)} Archive</button>`;
         }
         card.innerHTML = `
@@ -474,8 +450,8 @@ function displayStudents(students) {
         const row = document.createElement('tr');
         row.className = 'fade-in';
         let actions = `<button class="btn btn-sm btn-info" onclick="viewStudent(${s.id})">${icon('eye', 14)} View</button>`;
-        if (role === 'admin' || role === 'teacher') actions += ` <button class="btn btn-sm btn-secondary" onclick="editStudent(${s.id})">${icon('edit', 14)} Edit</button>`;
-        if (role === 'admin') actions += ` <button class="btn btn-sm btn-danger" onclick="deleteStudent(${s.id})">${icon('trash', 14)} Archive</button>`;
+        actions += ` <button class="btn btn-sm btn-secondary" onclick="editStudent(${s.id})">${icon('edit', 14)} Edit</button>`;
+        actions += ` <button class="btn btn-sm btn-danger" onclick="deleteStudent(${s.id})">${icon('trash', 14)} Archive</button>`;
         row.innerHTML = `<td><strong>${escapeHtml(s.student_name)}</strong></td><td>${escapeHtml(s.section_name || 'N/A')}</td><td>${escapeHtml(s.email || 'N/A')}</td><td>${escapeHtml(s.phone || 'N/A')}</td><td>${escapeHtml(s.gender || 'N/A')}</td><td><div class="table-actions">${actions}</div></td>`;
         tbody.appendChild(row);
     });
@@ -1071,7 +1047,7 @@ function exportGradesPDF() {
     if (!jsPDF) { showNotification('PDF library not loaded yet', 'error'); return; }
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(16); doc.setFont('helvetica','bold');
-    doc.text('S.M.A.R.T — Grade Records', 14, 18);
+    doc.text('CheckMate-SRMS — Grade Records', 14, 18);
     doc.setFontSize(10); doc.setFont('helvetica','normal');
     doc.text(`Generated: ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}`, 14, 25);
     doc.autoTable({
@@ -1082,7 +1058,7 @@ function exportGradesPDF() {
             return [g.student_name, g.section_name || 'N/A', g.subject, g.grade, g.score || '—', g.max_score || '—', pct, g.semester || 'N/A', g.academic_year || 'N/A'];
         }),
         styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [99, 102, 241], fontStyle: 'bold' },
+        headStyles: { fillColor: [22, 163, 74], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 248, 255] },
         margin: { top: 30 }
     });
@@ -1100,7 +1076,7 @@ function exportAttendancePDF() {
         if (!jsPDF) { showNotification('PDF library not loaded yet', 'error'); return; }
         const doc = new jsPDF();
         doc.setFontSize(16); doc.setFont('helvetica','bold');
-        doc.text('S.M.A.R.T — Attendance Records', 14, 18);
+        doc.text('CheckMate-SRMS — Attendance Records', 14, 18);
         doc.setFontSize(10); doc.setFont('helvetica','normal');
         doc.text(`Date: ${selectedTimelineDate.toLocaleDateString('en-US', { dateStyle: 'long' })}`, 14, 25);
         doc.autoTable({
@@ -1108,7 +1084,7 @@ function exportAttendancePDF() {
             head: [['Student','Section','Status','Excuse Letter','Remarks']],
             body: data.data.map(r => [r.student_name, r.section_name || 'N/A', r.status, r.has_excuse_letter ? 'Yes ✓' : '—', r.remarks || '—']),
             styles: { fontSize: 10, cellPadding: 3 },
-            headStyles: { fillColor: [99, 102, 241], fontStyle: 'bold' },
+            headStyles: { fillColor: [22, 163, 74], fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 248, 255] },
             margin: { top: 30 }
         });
@@ -1326,8 +1302,8 @@ async function permanentDelete(type, id) {
 // ============================================
 // CSV EXPORT
 // ============================================
-function exportStudents() { fetch('/api/students').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'email', 'phone', 'gender'], ['Name', 'Section', 'Email', 'Phone', 'Gender']), 'smart_students.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
-function exportGrades() { fetch('/api/grades').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'subject', 'grade', 'score', 'max_score', 'semester', 'academic_year'], ['Name', 'Section', 'Subject', 'Grade', 'Score', 'Max', 'Semester', 'Year']), 'smart_grades.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
+function exportStudents() { fetch('/api/students').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'email', 'phone', 'gender'], ['Name', 'Section', 'Email', 'Phone', 'Gender']), 'checkmate_students.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
+function exportGrades() { fetch('/api/grades').then(r => r.json()).then(d => { if (d.success) { downloadCSV(generateCSV(d.data, ['student_name', 'section_name', 'subject', 'grade', 'score', 'max_score', 'semester', 'academic_year'], ['Name', 'Section', 'Subject', 'Grade', 'Score', 'Max', 'Semester', 'Year']), 'checkmate_grades.csv'); showNotification('Exported', 'success'); } }).catch(() => showNotification('Failed', 'error')); }
 function generateCSV(data, fields, headers) { let csv = headers.join(',') + '\n'; data.forEach(row => { csv += fields.map(f => `"${String(row[f] ?? '').replace(/"/g, '""')}"`).join(',') + '\n'; }); return csv; }
 function downloadCSV(csv, filename) { const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); URL.revokeObjectURL(link.href); }
 
@@ -1449,9 +1425,7 @@ async function loadMyExcuseLetters() {
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab[data-tab="excuse-tab"]').forEach(btn => {
         btn.addEventListener('click', () => {
-            const role = currentUser?.role;
-            if (role === 'admin' || role === 'teacher') loadExcuseLetters();
-            else if (role === 'student') loadMyExcuseLetters();
+            loadExcuseLetters();
         });
     });
 });

@@ -1,7 +1,7 @@
 {
-  "name": "smart-srms",
+  "name": "checkmate-srms",
   "version": "3.0.0",
-  "description": "S.M.A.R.T — Student Management And Record Tracking system with NFC/QR attendance",
+  "description": "CheckMate-SRMS — Student Record Management System with NFC/QR attendance",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -21,7 +21,7 @@
     "qrcode",
     "postgresql"
   ],
-  "author": "S.M.A.R.T Team",
+  "author": "CheckMate-SRMS Team",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
@@ -33,4 +33,3 @@
     "nodemon": "^3.0.1"
   }
 }
-

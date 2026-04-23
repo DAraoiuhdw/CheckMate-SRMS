@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="NFC-based attendance tracking in S.M.A.R.T.">
-    <title>NFC Attendance - S.M.A.R.T</title>
+    <meta name="description" content="NFC-based attendance tracking in CheckMate-SRMS.">
+    <title>NFC Attendance - CheckMate-SRMS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,19 +16,18 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <div class="sidebar-logo-icon">SM</div>
-                    <div class="sidebar-logo-text">S.M.A.R.T</div>
+                    <div class="sidebar-logo-icon">CM</div>
+                    <div class="sidebar-logo-text">CheckMate</div>
                 </div>
             </div>
             <nav>
                 <ul class="sidebar-nav">
                     <li class="sidebar-nav-item"><a href="/dashboard.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Dashboard</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
-                    <li class="sidebar-nav-item"><a href="/grades.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Grades</a></li>
+                    <li class="sidebar-nav-item"><a href="/students.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Students</a></li>
+                    <li class="sidebar-nav-item"><a href="/attendance.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Attendance</a></li>
                     <li class="sidebar-nav-item"><a href="/announcements.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Announcements</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/nfc-attendance.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
-                    <li class="sidebar-nav-item" data-role="admin,teacher"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
+                    <li class="sidebar-nav-item"><a href="/nfc-attendance.html" class="sidebar-nav-link active"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/><path d="M16.37 2a20.16 20.16 0 0 1 0 20"/></svg></span> NFC Attendance</a></li>
+                    <li class="sidebar-nav-item"><a href="/archive.html" class="sidebar-nav-link"><span class="sidebar-nav-icon"><svg viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span> Archive</a></li>
                 </ul>
             </nav>
             <div class="sidebar-footer">
@@ -92,7 +91,7 @@
                     </div>
                 </div>
             </div>
-            <footer class="site-footer"><div class="footer-content"><div class="footer-left"><strong>S.M.A.R.T</strong> &copy; 2024 All Rights Reserved</div><div class="footer-right"><a href="tel:09688742671" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 09688742671</a><span class="footer-divider"></span><a href="mailto:deuscherhansbusiness@gmail.com" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> deuscherhansbusiness@gmail.com</a></div></div></footer>
+            <footer class="site-footer"><div class="footer-content"><div class="footer-left"><strong>CheckMate-SRMS</strong> &copy; 2024 All Rights Reserved</div><div class="footer-right"><a href="tel:09688742671" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 09688742671</a><span class="footer-divider"></span><a href="mailto:deuscherhansbusiness@gmail.com" class="footer-contact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> deuscherhansbusiness@gmail.com</a></div></div></footer>
         </main>
     </div>
     

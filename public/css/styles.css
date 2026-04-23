@@ -1,4 +1,4 @@
-/* S.M.A.R.T — Student Management And Record Tracking — CSS */
+/* CheckMate-SRMS — Student Record Management System — CSS */
 /* Google Font loaded via HTML <link> tag — Inter */
 
 /* ============================================
@@ -6,10 +6,10 @@
    ============================================ */
 :root {
     /* Brand Colors */
-    --primary: #2563EB;
-    --primary-dark: #1D4ED8;
-    --primary-light: #3B82F6;
-    --accent: #0EA5E9;
+    --primary: #16A34A;
+    --primary-dark: #15803D;
+    --primary-light: #22C55E;
+    --accent: #10B981;
     --success: #16A34A;
     --success-dark: #15803D;
     --warning: #D97706;
@@ -57,8 +57,8 @@
     --badge-warning-border: rgba(217, 119, 6, 0.2);
     --badge-info-bg: rgba(124, 58, 237, 0.08);
     --badge-info-border: rgba(124, 58, 237, 0.2);
-    --badge-blue-bg: rgba(37, 99, 235, 0.08);
-    --badge-blue-border: rgba(37, 99, 235, 0.2);
+    --badge-blue-bg: rgba(22, 163, 74, 0.08);
+    --badge-blue-border: rgba(22, 163, 74, 0.2);
 }
 
 /* ============================================
@@ -96,8 +96,8 @@ body.dark-mode {
     --badge-warning-border: rgba(217, 119, 6, 0.3);
     --badge-info-bg: rgba(124, 58, 237, 0.15);
     --badge-info-border: rgba(124, 58, 237, 0.3);
-    --badge-blue-bg: rgba(37, 99, 235, 0.15);
-    --badge-blue-border: rgba(37, 99, 235, 0.3);
+    --badge-blue-bg: rgba(22, 163, 74, 0.15);
+    --badge-blue-border: rgba(22, 163, 74, 0.3);
 }
 
 /* ============================================
@@ -163,7 +163,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
     display: inline-flex; align-items: center; justify-content: center;
     margin-bottom: 12px;
     color: white; font-weight: 700; font-size: 20px;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 
 .app-title {
@@ -201,7 +201,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {
     outline: none; border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
 
 .form-input::placeholder { color: var(--text-muted); }
@@ -221,9 +221,9 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
 
 .btn-primary {
     background: var(--primary); color: white; width: 100%;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
 }
-.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3); }
+.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 14px rgba(22, 163, 74, 0.3); }
 
 .btn-secondary {
     background: var(--input-bg); color: var(--text-primary);
@@ -302,7 +302,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
     background: linear-gradient(135deg, var(--primary), var(--accent));
     border-radius: 10px; display: flex; align-items: center; justify-content: center;
     color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
 }
 
 .sidebar-logo-text { color: var(--text-primary); font-size: 16px; font-weight: 700; letter-spacing: 0.5px; }
@@ -543,7 +543,7 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
     background: var(--input-bg); color: var(--text-primary);
     font-size: 15px; font-family: inherit;
 }
-.search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
 .search-input::placeholder { color: var(--text-muted); }
 
 /* ============================================
@@ -657,13 +657,13 @@ body.dark-mode .wallpaper-overlay { background: rgba(0,0,0,0.4); }
     margin: 24px auto; transition: var(--transition); position: relative;
 }
 
-.nfc-scan-area.scanning { border-color: var(--primary); border-style: solid; animation: nfc-pulse 2s ease-in-out infinite; box-shadow: 0 0 30px rgba(37, 99, 235, 0.15); }
+.nfc-scan-area.scanning { border-color: var(--primary); border-style: solid; animation: nfc-pulse 2s ease-in-out infinite; box-shadow: 0 0 30px rgba(22, 163, 74, 0.15); }
 .nfc-scan-area.success { border-color: var(--success); border-style: solid; background: var(--badge-success-bg); }
 .nfc-scan-area.error { border-color: var(--danger); border-style: solid; background: var(--badge-danger-bg); }
 
 @keyframes nfc-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.2); }
-    50% { box-shadow: 0 0 0 20px rgba(37, 99, 235, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.2); }
+    50% { box-shadow: 0 0 0 20px rgba(22, 163, 74, 0); }
 }
 
 .nfc-icon svg { width: 56px; height: 56px; stroke: var(--text-muted); fill: none; stroke-width: 1.5; }
