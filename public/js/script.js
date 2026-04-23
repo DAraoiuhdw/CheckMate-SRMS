@@ -139,6 +139,7 @@ async function logout() {
 // ============================================
 // ROLE-BASED PERMISSIONS
 // ============================================
+function enforceRolePermissions() {
     // No role gating needed — all users are officers
     document.body.classList.add('auth-resolved');
 }
@@ -147,7 +148,7 @@ function updateUserInterface() {
     if (!currentUser) return;
     document.querySelectorAll('.user-name').forEach(el => el.textContent = currentUser.name);
     document.querySelectorAll('.user-email').forEach(el => el.textContent = currentUser.email);
-    document.querySelectorAll('.user-role').forEach(el => el.textContent = currentUser.role);
+    document.querySelectorAll('.user-role').forEach(el => el.textContent = currentUser.role === 'officer' ? 'Class Officer' : currentUser.role);
     // Student avatar initial
     const avatar = document.getElementById('student-avatar-initial');
     if (avatar && currentUser.name) avatar.textContent = currentUser.name.charAt(0).toUpperCase();

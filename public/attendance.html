@@ -176,39 +176,8 @@
                 </div>
             </div>
 
-            <!-- Excuse Letters Tab (teacher/admin see all; student sees own + submit form) -->
-            <div id="excuse-tab" class="tab-content">
 
 
-                <!-- Student side: submit form + own submissions -->
-                <div data-role="student">
-                    <div class="card" style="margin-bottom:16px;">
-                        <div class="card-header">
-                            <h2 class="card-title">📨 Submit an Excuse Letter</h2>
-                        </div>
-                        <form id="excuse-form" style="display:grid;gap:12px;max-width:540px;">
-                            <div class="form-group">
-                                <label class="form-label" for="excuse-date">Date of Absence *</label>
-                                <input type="date" id="excuse-date" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="excuse-reason">Reason / Explanation *</label>
-                                <textarea id="excuse-reason" class="form-textarea" rows="4" placeholder="Please explain your absence in detail…" required></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-success" style="width:fit-content;">Submit Excuse Letter</button>
-                        </form>
-                    </div>
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">My Submissions</h2>
-                            <button class="btn btn-secondary btn-sm" onclick="loadMyExcuseLetters()">Refresh</button>
-                        </div>
-                        <div id="my-excuse-letters">
-                            <div class="text-center" style="padding:20px;"><div class="loading"></div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <footer class="site-footer">
                 <div class="footer-content">
@@ -223,31 +192,6 @@
         </main>
     </div>
     <script src="/js/script.js"></script>
-    <script>
-        // Excuse form handler (student)
-        document.getElementById('excuse-form')?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const date = document.getElementById('excuse-date').value;
-            const reason = document.getElementById('excuse-reason').value.trim();
-            if (!date || !reason) return;
-            const btn = e.target.querySelector('button[type=submit]');
-            btn.disabled = true; btn.textContent = 'Submitting…';
-            try {
-                const res = await fetch('/api/excuse-letters', {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ absence_date: date, reason })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showNotification('Excuse letter submitted!', 'success');
-                    e.target.reset();
-                    loadMyExcuseLetters();
-                } else {
-                    showNotification(data.message || 'Submission failed', 'error');
-                }
-            } catch(err) { showNotification('Network error', 'error'); }
-            btn.disabled = false; btn.textContent = 'Submit Excuse Letter';
-        });
-    </script>
+
 </body>
 </html>
